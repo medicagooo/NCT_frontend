@@ -1,47 +1,46 @@
-function doGet() {
-  try {
-    var ssId = "1V7J8IvicBKM5HLSERukdVSNkw-Sj3Fez5Y4E8jzFAf0";
-    var ss = SpreadsheetApp.openById(ssId);
-    var sheet = ss.getSheets()[0]; // 取得第一個分頁
-    var data = sheet.getDataRange().getValues();
-    var headers = data[0];
-    var result = [];
+function doGet(e) {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  var headers = data[0];
+  var result = [];
+
+  for (var i = 1; i < data.length; i++) {
+    var obj = {};
+    for (var j = 0; j < headers.length; j++) {
+      obj[headers[j]] = data[i][j];
+    }
+    result.push(obj);
+  }
+
+  return ContentService.createTextOutput(JSON.stringify(result))
+    .setMimeType(ContentService.MimeType.JSON);
+}
+
+
+// 在 GAS 編輯器中執行這個，而不是放在 doGet 裡
+function updateGeocodes() {
+  var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
+  var data = sheet.getDataRange().getValues();
+  
+  for (var i = 1; i < data.length; i++) {
+    var address = data[i][1]; // 假設地址在第 2 欄
+    var lat = data[i][5];     // 假設 lat 在第 6 欄
     
-    // 欄位定義
-    var addrIdx = 6;  // G 欄 (地址)
-    var latIdx = 16;  // Q 欄 (緯度)
-    var lngIdx = 17;  // R 欄 (經度)
-
-    for (var i = 1; i < data.length; i++) {
-      var row = data[i];
-      var address = row[addrIdx];
-      var lat = row[latIdx];
-      var lng = row[lngIdx];
-
-      // 地理編碼邏輯
-      if (address && (!lat || !lng)) {
-        var loc = Maps.newGeocoder().geocode(address);
-        if (loc.status === 'OK') {
-          lat = loc.results[0].geometry.location.lat;
-          lng = loc.results[0].geometry.location.lng;
-          sheet.getRange(i + 1, latIdx + 1).setValue(lat);
-          sheet.getRange(i + 1, lngIdx + 1).setValue(lng);
+    // 如果沒有經緯度才執行 geocode
+    if (!lat) {
+      try {
+        var response = Maps.newGeocoder().geocode(address);
+        if (response.results.length > 0) {
+          var result = response.results[0].geometry.location;
+          sheet.getRange(i + 1, 6).setValue(result.lat); // 存回 lat
+          sheet.getRange(i + 1, 7).setValue(result.lng); // 存回 lng
+          
+          // 重要：暫停一秒，符合 Google 限制
+          Utilities.sleep(1000); 
         }
-      }
-
-      if (lat && lng) {
-        var obj = {};
-        for (var j = 0; j < headers.length; j++) {
-          obj[headers[j]] = row[j];
-        }
-        obj.lat = lat;
-        obj.lng = lng;
-        result.push(obj);
+      } catch (e) {
+        console.error("地址轉換失敗: " + address);
       }
     }
-    return ContentService.createTextOutput(JSON.stringify(result)).setMimeType(ContentService.MimeType.JSON);
-    
-  } catch (e) {
-    return ContentService.createTextOutput(JSON.stringify({"error": e.toString()})).setMimeType(ContentService.MimeType.JSON);
   }
 }
