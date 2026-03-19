@@ -133,34 +133,31 @@ let lastFetchTime = 0;
 
 app.get('/api/map-data', async (req, res) => {
     const now = Date.now();
-    // 如果快取存在且未超過 5 分鐘 (300,000 ms)，直接回傳
+    
+    // 檢查快取（快取現在應該存整個物件，包含 stats 和 data）
     if (cachedData && (now - lastFetchTime < 300000)) {
         return res.json(cachedData);
     }
     try {
         const googleAppsScriptUrl = process.env.GOOGLE_SCRIPT_URL;
-        const JSONresponse = await axios.get(googleAppsScriptUrl);
-        const response = JSONresponse;
+        const response = await axios.get(googleAppsScriptUrl);
         
-        let rawData = response.data;
+        let rawData = response.data.data;
+        let statistics = response.data.statistics; // 從 GAS 拿到統計資訊
 
-        // --- 防護機制：檢查數據是否為陣列 ---
+        // --- 防護機制 ---
         if (!Array.isArray(rawData)) {
-            console.error("收到的數據不是陣列:", rawData);
-            // 如果 GAS 回傳的是字串，嘗試解析它
             if (typeof rawData === 'string') {
-                try {
-                    rawData = JSON.parse(rawData);
-                } catch (e) {
-                    return res.status(500).json({ error: "數據解析失敗", raw: rawData });
+                try { rawData = JSON.parse(rawData); } catch (e) {
+                    return res.status(500).json({ error: "數據解析失敗" });
                 }
             } else {
-                return res.status(500).json({ error: "預期收到陣列但得到其他類型", received: typeof rawData });
+                return res.status(500).json({ error: "預期收到陣列但得到其他類型" });
             }
         }
 
-        const cleanData = rawData.filter(item => item && (item.lat || item.緯度)).map(item => {
-
+        // 資料清洗
+        const cleanData = rawData.filter(item => item && (item.lat || item['緯度'])).map(item => {
             return {
                 name: item['學校名稱'] || "未填寫名稱",
                 addr: item['學校地址'] || "無地址",
@@ -176,15 +173,25 @@ app.get('/api/map-data', async (req, res) => {
             };
         });
 
-        cachedData = cleanData; // 存入快取
+        // --- 組合最終結果 ---
+        const finalResponse = {
+            statistics: {
+                ...statistics, // 保留 GAS 傳來的統計
+                clean_count: cleanData.length, // 額外紀錄清洗後剩幾筆
+                last_synced: new Date().toISOString()
+            },
+            data: cleanData
+        };
+
+        cachedData = finalResponse; // 存入快取 (存整包)
         lastFetchTime = now;
-        res.json(cleanData);
+        
+        res.json(finalResponse);
+
     } catch (error) {
         console.error("API Error:", error.message);
-        if (cachedData) {
-            return res.json(cachedData);
-        }
-        res.status(500).json({ error: "無法取得地圖數據", message: error.message });
+        if (cachedData) return res.json(cachedData);
+        res.status(500).json({ error: "無法取得地圖數據" });
     }
 });
 
