@@ -70,7 +70,7 @@ fetch(apiUrl)
         function timeUpdate() {
             const elapsed = Math.floor((Date.now() - lastSyncedTime) / 1000);
             let updButton = (elapsed > 300000) ? '，<button onclick="window.location.reload();">刷新</button>' : ''
-            document.getElementById('lastSynced').innerText = elapsed + ` 秒前${updButton}`;
+            document.getElementById('lastSynced').innerHTML = elapsed + ` 秒前${updButton}`;
         }
         setInterval(timeUpdate, 1000);
         

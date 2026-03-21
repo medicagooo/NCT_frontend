@@ -170,7 +170,7 @@ app.get('/api/map-data', async (req, res) => {
                 HMaster: item['校長名字'] || "",
                 scandal: item['學校的醜聞'] || "",
                 contact: item['學校的聯繫方式'] || "",
-                //inputType: item['請問您是什麽身份？'] || ""
+                inputType: item['請問您是什麽身份？'] || ""
             };
         });
 
