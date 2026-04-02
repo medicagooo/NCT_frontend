@@ -1,6 +1,20 @@
-<div class="language-switcher" aria-label="<%= t('common.language') %>">
-    <span class="language-switcher__label"><%= t('common.language') %></span>
-    <div class="language-switcher__group" role="group" aria-label="<%= t('common.language') %>">
+<div class="language-switcher" aria-label="<%= t('common.language') %>" data-language-switcher>
+    <button
+        type="button"
+        class="language-switcher__toggle"
+        data-language-toggle
+        aria-label="<%= t('common.language') %>"
+        aria-controls="language-switcher-group"
+        aria-expanded="false"
+    >
+        <span class="language-switcher__icon" aria-hidden="true">🌏</span>
+    </button>
+    <div
+        id="language-switcher-group"
+        class="language-switcher__group"
+        role="group"
+        aria-label="<%= t('common.language') %>"
+    >
         <% languageOptions.forEach((option) => { %>
             <button
                 type="button"
