@@ -2,7 +2,7 @@ const express = require('express');
 const path = require('path');
 const cors = require('cors');
 const helmet = require('helmet');
-const { apiUrl, debugMod, formDryRun, googleFormUrl, googleScriptUrl, publicMapDataUrl, submitRateLimitMax, title } = require('../config/appConfig');
+const { apiUrl, debugMod, formDryRun, googleFormUrl, googleScriptUrl, publicMapDataUrl, siteUrl, submitRateLimitMax, title } = require('../config/appConfig');
 const { areaOptions, formRules } = require('../config/formConfig');
 const { paths } = require('../config/fileConfig');
 const { helmetConfig, requestBodyLimits } = require('../config/security');
@@ -32,6 +32,7 @@ app.use(express.json({ limit: requestBodyLimits.json }));
 app.use(createPageRoutes({
   apiUrl,
   debugMod,
+  siteUrl,
   title
 }));
 app.use(createFormRoutes({

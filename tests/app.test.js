@@ -78,6 +78,40 @@ test('root page renders successfully', async () => {
   assert.match(response.body, /NO CONVERSION THERAPY/i);
 });
 
+test('sitemap.xml lists static pages and blog articles', async () => {
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    SITE_URL: 'https://example.com'
+  });
+  const response = await requestPath(app, '/sitemap.xml');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers['content-type'], /application\/xml/);
+  assert.match(response.body, /<loc>https:\/\/example\.com\/<\/loc>/);
+  assert.match(response.body, /<loc>https:\/\/example\.com\/form<\/loc>/);
+  assert.match(response.body, /<loc>https:\/\/example\.com\/map<\/loc>/);
+  assert.match(response.body, /<loc>https:\/\/example\.com\/blog<\/loc>/);
+  assert.match(response.body, /https:\/\/example\.com\/port\/%E9%97%9C%E6%96%BC%E5%BF%83%E7%A8%AE%E5%AD%90%E6%95%99%E8%82%B2%E9%81%95%E6%B3%95%E8%BE%A6%E5%AD%B8%E7%9A%84%E6%8E%A7%E5%91%8A/);
+  assert.doesNotMatch(response.body, /\/debug<\/loc>/);
+});
+
+test('robots.txt exposes sitemap and blocks non-indexable routes', async () => {
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    SITE_URL: 'https://example.com'
+  });
+  const response = await requestPath(app, '/robots.txt');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers['content-type'], /text\/plain/);
+  assert.match(response.body, /^User-agent: \*$/m);
+  assert.match(response.body, /^Allow: \/$/m);
+  assert.match(response.body, /^Disallow: \/api\/$/m);
+  assert.match(response.body, /^Disallow: \/submit$/m);
+  assert.match(response.body, /^Disallow: \/debug$/m);
+  assert.match(response.body, /^Sitemap: https:\/\/example\.com\/sitemap\.xml$/m);
+});
+
 test('debug page is hidden when debug mode is disabled', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/debug');

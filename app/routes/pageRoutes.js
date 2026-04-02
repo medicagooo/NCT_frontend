@@ -5,6 +5,8 @@ const { getAreaOptions } = require('../../config/areaSelector');
 const { getLocalizedFormRules, getLocalizedIdentityOptions, getLocalizedSexOptions } = require('../../config/formConfig');
 const { loadFriends } = require('../services/friendsService');
 const { renderMarkdown } = require('../services/markedService');
+const { generateRobotsTxt } = require('../services/robotsService');
+const { generateSitemapXml } = require('../services/sitemapService');
 const { paths } = require('../../config/fileConfig');
 
 function resolveMarkdownPath(blogDirectory, articleId) {
@@ -28,8 +30,28 @@ function resolveMarkdownPath(blogDirectory, articleId) {
 }
 
 // 页面路由只负责渲染模板，不承载表单提交或 API 逻辑。
-function createPageRoutes({ apiUrl, debugMod, title }) {
+function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
   const router = express.Router();
+
+  router.get('/robots.txt', (_req, res) => {
+    res
+      .type('text/plain')
+      .set('Cache-Control', 'public, max-age=300')
+      .send(generateRobotsTxt(siteUrl));
+  });
+
+  router.get('/sitemap.xml', (_req, res) => {
+    const xml = generateSitemapXml({
+      blogDataPath: paths.blogData,
+      blogDirectory: paths.blog,
+      siteUrl
+    });
+
+    res
+      .type('application/xml')
+      .set('Cache-Control', 'public, max-age=300')
+      .send(xml);
+  });
 
   // 首頁：项目导航入口。
   router.get('/', (req, res) => {
