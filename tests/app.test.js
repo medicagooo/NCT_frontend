@@ -149,6 +149,49 @@ test('debug page renders when debug mode is enabled', async () => {
   assert.match(response.body, /Debug/);
 });
 
+test('about page translates friend descriptions with google translation in english mode', async () => {
+  const restoreFetch = installTranslationFetchStub();
+
+  try {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    const response = await requestPath(app, '/aboutus?lang=en');
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.body, /EN:一隻可愛的小藥娘的網站/);
+    assert.match(response.body, /EN:一名独立调查人/);
+    assert.match(response.body, /EN:一个不被喜欢的跨女/);
+    assert.doesNotMatch(response.body, /<p class="friend-card__desc">The personal site of a very cute trans girl<\/p>/);
+    assert.doesNotMatch(response.body, /<p class="friend-card__desc">An independent investigator<\/p>/);
+  } finally {
+    restoreFetch();
+    clearProjectModules();
+  }
+});
+
+test('translation service normalizes spaces around apostrophes in english text', async () => {
+  clearProjectModules();
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    async json() {
+      return [[["A cute little medicine girl ’ s website", "一隻可愛的小藥娘的網站"]]];
+    }
+  });
+
+  try {
+    const { translateDetailItems } = require(path.join(projectRoot, 'app/services/textTranslationService'));
+    const [result] = await translateDetailItems({
+      items: [{ fieldKey: '0', text: '一隻可愛的小藥娘的網站' }],
+      targetLanguage: 'en'
+    });
+
+    assert.equal(result.translatedText, "A cute little medicine girl's website");
+  } finally {
+    global.fetch = originalFetch;
+    clearProjectModules();
+  }
+});
+
 test('blog route blocks directory traversal attempts', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/port/..%2FREADME');

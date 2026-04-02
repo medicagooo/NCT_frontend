@@ -27,6 +27,16 @@ function extractTranslatedText(responseBody) {
     .trim();
 }
 
+function normalizeTranslatedText(text, targetLanguage) {
+  const normalizedText = String(text || '').trim();
+
+  if (targetLanguage !== 'en') {
+    return normalizedText;
+  }
+
+  return normalizedText.replace(/(\p{L})\s*[’']\s*(\p{L})/gu, "$1'$2");
+}
+
 async function requestTranslationWithCurl(text, targetLanguage) {
   const { stdout } = await execFileAsync('curl', [
     '-sS',
@@ -78,8 +88,9 @@ async function translateSingleText(text, targetLanguage) {
     throw new Error('翻譯結果為空');
   }
 
-  translationCache.set(cacheKey, translatedText);
-  return translatedText;
+  const normalizedTranslatedText = normalizeTranslatedText(translatedText, targetLanguage);
+  translationCache.set(cacheKey, normalizedTranslatedText);
+  return normalizedTranslatedText;
 }
 
 async function translateDetailItems({ items, targetLanguage }) {
