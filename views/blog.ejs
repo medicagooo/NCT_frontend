@@ -19,7 +19,12 @@
             <% SavedTags.forEach(Prot =>{%>
                 <div class="div">
                     <a href="/port/<%= Prot.filename %>">
-                        <h2><%= Prot.title %></h2>
+                        <h2 class="blog-list-card__title">
+                            <span class="blog-list-card__title-original"><%= Prot.title %></span>
+                            <% if (Prot.translatedTitle) { %>
+                                <span class="blog-list-card__title-translation"><%= Prot.translatedTitle %></span>
+                            <% } %>
+                        </h2>
                         <p><%= t('blog.author') %><%= Prot.author %></p>
                         <p><%= t('blog.creationDate') %><%= Prot.CreationDate %></p>
                         <p><%= t('blog.language') %><%= Prot.Language %></p>

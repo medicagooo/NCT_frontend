@@ -70,6 +70,28 @@ function requestPath(app, requestPath) {
   });
 }
 
+function installTranslationFetchStub(prefix = 'EN:') {
+  const originalFetch = global.fetch;
+
+  global.fetch = async (input) => {
+    const requestUrl = input instanceof URL
+      ? input
+      : new URL(typeof input === 'string' ? input : input.url);
+    const sourceText = requestUrl.searchParams.get('q') || '';
+
+    return {
+      ok: true,
+      async json() {
+        return [[[`${prefix}${sourceText}`, sourceText]]];
+      }
+    };
+  };
+
+  return () => {
+    global.fetch = originalFetch;
+  };
+}
+
 test('root page renders successfully', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/');
@@ -143,6 +165,96 @@ test('markdown rendering escapes raw HTML and strips dangerous links', () => {
   assert.doesNotMatch(html, /<script>alert\(1\)<\/script>/);
   assert.doesNotMatch(html, /href="javascript:/i);
   assert.match(html, /rel="noopener noreferrer"/);
+});
+
+test('blog translation service adds translated titles in english mode', async () => {
+  clearProjectModules();
+  const { translateBlogListEntries } = require(path.join(projectRoot, 'app/services/blogTranslationService'));
+
+  const translatedEntries = await translateBlogListEntries(
+    [
+      { title: '文章甲' },
+      { title: '文章甲' },
+      { title: '' }
+    ],
+    {
+      targetLanguage: 'en',
+      translateBatch: async (texts) => texts.map((text) => `EN:${text}`)
+    }
+  );
+
+  assert.equal(translatedEntries[0].translatedTitle, 'EN:文章甲');
+  assert.equal(translatedEntries[1].translatedTitle, 'EN:文章甲');
+  assert.equal(translatedEntries[2].translatedTitle, '');
+});
+
+test('blog translation service renders bilingual article content in english mode', async () => {
+  clearProjectModules();
+  const { renderBlogArticleHtml } = require(path.join(projectRoot, 'app/services/blogTranslationService'));
+
+  const html = await renderBlogArticleHtml('# 标题\n\n第一段\n\n1. 条目一', {
+    targetLanguage: 'en'
+  });
+
+  assert.match(html, /blog-bilingual-block--heading/);
+  assert.match(html, /<h1>标题<\/h1>/);
+  assert.match(html, /data-blog-translation-source="标题"/);
+  assert.match(html, /data-blog-translation-source="第一段"/);
+  assert.match(html, /blog-bilingual-list/);
+  assert.match(html, /data-blog-translation-source="条目一"/);
+  assert.match(html, /hidden/);
+});
+
+test('blog translation service renders plain article content outside english mode', async () => {
+  clearProjectModules();
+  const { renderBlogArticleHtml } = require(path.join(projectRoot, 'app/services/blogTranslationService'));
+  const html = await renderBlogArticleHtml('# 标题', {
+    targetLanguage: 'zh-TW'
+  });
+
+  assert.match(html, /<h1>标题<\/h1>/);
+  assert.doesNotMatch(html, /data-blog-translation-source=/);
+});
+
+test('blog list shows translated titles when english language is selected', async () => {
+  const restoreFetch = installTranslationFetchStub();
+
+  try {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    const response = await requestPath(app, '/blog?lang=en');
+    const originalTitle = '關於心種子教育違法辦學的控告';
+    const translatedTitle = `EN:${originalTitle}`;
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(response.body.includes(originalTitle));
+    assert.ok(response.body.includes(translatedTitle));
+    assert.ok(response.body.indexOf(originalTitle) < response.body.indexOf(translatedTitle));
+  } finally {
+    restoreFetch();
+    clearProjectModules();
+  }
+});
+
+test('blog article shows bilingual content when english language is selected', async () => {
+  const restoreFetch = installTranslationFetchStub();
+
+  try {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    const articleId = encodeURIComponent('關於心種子教育違法辦學的控告');
+    const response = await requestPath(app, `/port/${articleId}?lang=en`);
+    const originalHeading = '关于山东心种子教育咨询有限公司非法限制人身自由及身心摧残的维权通告';
+    const originalParagraph = '本人于114年10月3日至115年2月11日期间，被强制关押于山东心种子教育咨询有限公司（统一社会信用代码：91370781MA3DKU6R4Q）。在长达131天的关押中，相关机构采取限制人身自由、封闭式管理及各种心理压迫手段，导致本人精神遭受严重摧残。';
+
+    assert.equal(response.statusCode, 200);
+    assert.ok(response.body.includes(originalHeading));
+    assert.ok(response.body.includes(originalParagraph));
+    assert.ok(response.body.includes('data-blog-translation-source='));
+    assert.ok(response.body.includes('/js/blog_article_translation.js'));
+    assert.ok(!response.body.includes(`EN:${originalHeading}`));
+  } finally {
+    restoreFetch();
+    clearProjectModules();
+  }
 });
 
 test('map data service preserves valid upstream sync timestamps', () => {

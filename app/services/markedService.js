@@ -39,6 +39,15 @@ function sanitizeUrl(url) {
 
 const safeRenderer = new marked.Renderer();
 
+function getMarkedOptions() {
+  return {
+    gfm: true,
+    headerIds: false,
+    mangle: false,
+    renderer: safeRenderer
+  };
+}
+
 safeRenderer.html = function renderHtml(html) {
   return escapeHtml(html);
 };
@@ -81,14 +90,20 @@ safeRenderer.image = function renderImage(href, title, text) {
 };
 
 function renderMarkdown(content) {
-  return marked.parse(String(content || ''), {
-    gfm: true,
-    headerIds: false,
-    mangle: false,
-    renderer: safeRenderer
-  });
+  return marked.parse(String(content || ''), getMarkedOptions());
+}
+
+function lexMarkdown(content) {
+  return marked.lexer(String(content || ''), getMarkedOptions());
+}
+
+function renderMarkdownTokens(tokens) {
+  return marked.parser(Array.isArray(tokens) ? tokens : [], getMarkedOptions());
 }
 
 module.exports = {
-  renderMarkdown
+  escapeHtml,
+  lexMarkdown,
+  renderMarkdown,
+  renderMarkdownTokens
 };

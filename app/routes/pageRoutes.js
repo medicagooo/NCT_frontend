@@ -3,8 +3,8 @@ const fs = require('fs');
 const path = require('path');
 const { getAreaOptions } = require('../../config/areaSelector');
 const { getLocalizedFormRules, getLocalizedIdentityOptions, getLocalizedSexOptions } = require('../../config/formConfig');
+const { renderBlogArticleHtml, translateBlogListEntries } = require('../services/blogTranslationService');
 const { loadFriends } = require('../services/friendsService');
-const { renderMarkdown } = require('../services/markedService');
 const { generateRobotsTxt } = require('../services/robotsService');
 const { generateSitemapXml } = require('../services/sitemapService');
 const { paths } = require('../../config/fileConfig');
@@ -105,7 +105,7 @@ function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
     });
   });
 
-  router.get('/blog', (req,res) => {
+  router.get('/blog', async (req,res) => {
     const SavedTags = JSON.parse(fs.readFileSync(paths.blogData, 'utf-8'));
     
     const QTag = req.query.tag;//現在頁面的query tag是什麽
@@ -115,8 +115,12 @@ function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
 
     if(QTag) filteredPort = SavedTags.Data.filter(p => p.tagid && p.tagid.includes(QTag));//篩選SavedTags裏面的tagid是Tag的
 
+    const localizedEntries = await translateBlogListEntries(filteredPort, {
+      targetLanguage: req.lang
+    });
+
     res.render('blog', {
-      SavedTags:filteredPort,//數據（已篩選）
+      SavedTags:localizedEntries,//數據（已篩選）
       QTag,//現在的query
       AllTags,//所有tag的數據
       apiUrl,
@@ -124,7 +128,7 @@ function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
     })
   })
 
-  router.get('/port/:id', (req, res) => {
+  router.get('/port/:id', async (req, res) => {
     const mdName = req.params.id;
     const mdPath = resolveMarkdownPath(paths.blog, mdName);
     
@@ -135,7 +139,9 @@ function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
     const content = fs.readFileSync(mdPath, 'utf-8');
     const [language, time, ...titleArr] = mdName.split('.');
     const title_B = mdName;
-    const rawHtml = renderMarkdown(content);
+    const rawHtml = await renderBlogArticleHtml(content, {
+      targetLanguage: req.lang
+    });
     
     const report = {
       language, 
