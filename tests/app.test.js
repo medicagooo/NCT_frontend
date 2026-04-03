@@ -41,9 +41,10 @@ function requestPath(app, requestPath) {
   return new Promise((resolve, reject) => {
     const server = app.listen(0, () => {
       const { port } = server.address();
-      const request = http.get({
+      const request = http.request({
         hostname: '127.0.0.1',
         port,
+        method: 'GET',
         path: requestPath
       }, (response) => {
         let body = '';
@@ -66,6 +67,49 @@ function requestPath(app, requestPath) {
       request.on('error', (error) => {
         server.close(() => reject(error));
       });
+
+      request.end();
+    });
+  });
+}
+
+function requestApp(app, { path: requestPath, method = 'GET', headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, () => {
+      const { port } = server.address();
+      const request = http.request({
+        hostname: '127.0.0.1',
+        port,
+        method,
+        path: requestPath,
+        headers
+      }, (response) => {
+        let responseBody = '';
+
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        response.on('end', () => {
+          server.close(() => {
+            resolve({
+              body: responseBody,
+              headers: response.headers,
+              statusCode: response.statusCode
+            });
+          });
+        });
+      });
+
+      request.on('error', (error) => {
+        server.close(() => reject(error));
+      });
+
+      if (typeof body === 'string') {
+        request.write(body);
+      }
+
+      request.end();
     });
   });
 }
@@ -167,11 +211,9 @@ test('about page translates friend descriptions with google translation in engli
     const response = await requestPath(app, '/aboutus?lang=en');
 
     assert.equal(response.statusCode, 200);
-    assert.match(response.body, /EN:一隻可愛的小藥娘的網站/);
-    assert.match(response.body, /EN:一名独立调查人/);
-    assert.match(response.body, /EN:一个不被喜欢的跨女/);
-    assert.doesNotMatch(response.body, /<p class="friend-card__desc">The personal site of a very cute trans girl<\/p>/);
-    assert.doesNotMatch(response.body, /<p class="friend-card__desc">An independent investigator<\/p>/);
+    assert.match(response.body, /EN:站长、策划\+执行和社群建立/);
+    assert.match(response.body, /EN:社群传播、资料提供/);
+    assert.match(response.body, /EN:社群建立/);
   } finally {
     restoreFetch();
     clearProjectModules();
@@ -368,4 +410,154 @@ test('map data service can bypass in-memory cache on force refresh', async () =>
   }
 
   assert.equal(fetchCount, 2);
+});
+
+test('public map API keeps CORS enabled while translate API stays same-origin only', async () => {
+  const originalFetch = global.fetch;
+  global.fetch = async () => ({
+    ok: true,
+    async json() {
+      return {
+        avg_age: 18,
+        last_synced: 1000,
+        statistics: [],
+        data: []
+      };
+    }
+  });
+
+  try {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    const mapResponse = await requestApp(app, {
+      path: '/api/map-data',
+      headers: {
+        Origin: 'https://evil.example'
+      }
+    });
+    const translateResponse = await requestApp(app, {
+      path: '/api/translate-text',
+      method: 'POST',
+      headers: {
+        Origin: 'https://evil.example',
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        items: [],
+        targetLanguage: 'en'
+      })
+    });
+
+    assert.equal(mapResponse.statusCode, 200);
+    assert.equal(mapResponse.headers['access-control-allow-origin'], '*');
+    assert.equal(translateResponse.statusCode, 200);
+    assert.equal(translateResponse.headers['access-control-allow-origin'], undefined);
+  } finally {
+    global.fetch = originalFetch;
+    clearProjectModules();
+  }
+});
+
+test('map refresh requests are rate limited even when callers force refresh', async () => {
+  clearProjectModules();
+  const originalFetch = global.fetch;
+  const mapDataService = require(path.join(projectRoot, 'app/services/mapDataService'));
+  let fetchCount = 0;
+
+  mapDataService.resetMapDataCache();
+  global.fetch = async () => {
+    fetchCount += 1;
+
+    return {
+      ok: true,
+      async json() {
+        return {
+          avg_age: 19,
+          last_synced: 1000 + fetchCount,
+          statistics: [],
+          data: []
+        };
+      }
+    };
+  };
+
+  try {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    const responses = [];
+
+    for (let index = 0; index < 4; index += 1) {
+      responses.push(await requestApp(app, {
+        path: '/api/map-data?refresh=1'
+      }));
+    }
+
+    assert.deepEqual(
+      responses.map((response) => response.statusCode),
+      [200, 200, 200, 429]
+    );
+    assert.equal(fetchCount, 1);
+  } finally {
+    global.fetch = originalFetch;
+    mapDataService.resetMapDataCache();
+    clearProjectModules();
+  }
+});
+
+test('translation service bounds in-memory cache growth', async () => {
+  clearProjectModules();
+  const originalFetch = global.fetch;
+  global.fetch = async (input) => {
+    const requestUrl = input instanceof URL
+      ? input
+      : new URL(typeof input === 'string' ? input : input.url);
+    const sourceText = requestUrl.searchParams.get('q') || '';
+
+    return {
+      ok: true,
+      async json() {
+        return [[[`EN:${sourceText}`, sourceText]]];
+      }
+    };
+  };
+
+  try {
+    const {
+      getTranslationCacheSize,
+      resetTranslationCache,
+      translateDetailItems,
+      translationCacheMaxEntries
+    } = require(path.join(projectRoot, 'app/services/textTranslationService'));
+
+    resetTranslationCache();
+
+    for (let index = 0; index < translationCacheMaxEntries + 25; index += 1) {
+      await translateDetailItems({
+        items: [{
+          fieldKey: '0',
+          text: `样本文本-${index}`
+        }],
+        targetLanguage: 'en'
+      });
+    }
+
+    assert.equal(getTranslationCacheSize(), translationCacheMaxEntries);
+    resetTranslationCache();
+  } finally {
+    global.fetch = originalFetch;
+    clearProjectModules();
+  }
+});
+
+test('audit log uses Express-resolved client IP instead of raw forwarded headers', () => {
+  clearProjectModules();
+  const { getClientIp } = require(path.join(projectRoot, 'app/services/auditLogService'));
+
+  assert.equal(getClientIp({
+    headers: {
+      'x-forwarded-for': '203.0.113.66'
+    },
+    ip: '127.0.0.1',
+    socket: {
+      remoteAddress: '127.0.0.1'
+    }
+  }), '127.0.0.1');
 });
