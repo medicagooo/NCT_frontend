@@ -85,12 +85,12 @@ function createPageRoutes({ apiUrl, debugMod, siteUrl, title }) {
 
   // 關於頁：这里额外读取 friends.json 作为友链数据源。
   router.get('/aboutus', async (req, res) => {
+    const friendsData = await loadFriends({
+      language: req.lang,
+    });
     res.render('about', {
       title: req.t('pageTitles.about', { title }),
-      friends: await loadFriends({
-        language: req.lang,
-        t: req.t
-      }),
+      friends: friendsData,
       apiUrl
     });
   });

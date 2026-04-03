@@ -1,5 +1,5 @@
 const supportedLanguages = ['zh-CN', 'zh-TW', 'en'];
-const defaultLanguage = 'zh-TW';
+const defaultLanguage = 'zh-CN';
 
 const provinceCodeLabels = {
   'zh-CN': {
