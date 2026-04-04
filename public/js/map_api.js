@@ -178,6 +178,7 @@ function showMapDataError(message) {
     const safeMessage = escapeHtml(message || i18n.map.list.loadFailed);
     const lastSyncedElement = document.getElementById('lastSynced');
     const avgAgeElement = document.getElementById('avgAge');
+    const schoolNumElement = document.getElementById('schoolNum');
     const mapElement = document.getElementById('map');
     const { error: errorColor } = getThemeColors();
 
@@ -187,6 +188,10 @@ function showMapDataError(message) {
 
     if (avgAgeElement) {
         avgAgeElement.textContent = safeMessage;
+    }
+
+    if(schoolNumElement) {
+        schoolNumElement.textContent = safeMessage;
     }
 
     if (mapElement) {
