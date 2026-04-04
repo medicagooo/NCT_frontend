@@ -452,6 +452,15 @@ h3 {
 label { display: block; margin-bottom: 8px; font-weight: bold; }
 label.required::after { content: " *"; color: #e74c3c; }
 
+.form-honeypot {
+    position: absolute;
+    left: -10000px;
+    top: auto;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+}
+
 .form-subtitle {
     text-align: center;
     color: var(--text-subtle);

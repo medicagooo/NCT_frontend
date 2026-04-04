@@ -173,6 +173,34 @@ function collectNodeText(node) {
   return [node.textContent, ...node.children.map((child) => collectNodeText(child))].join('');
 }
 
+function buildValidSubmissionBody(overrides = {}) {
+  const basePayload = {
+    identity: '受害者本人',
+    age: '18',
+    sex: '男',
+    sex_other: '',
+    provinceCode: '110000',
+    cityCode: '110101',
+    countyCode: '',
+    school_name: '测试学校',
+    school_address: '北京市东城区测试路 1 号',
+    date_start: '2024-01-01',
+    date_end: '',
+    experience: '',
+    headmaster_name: '',
+    contact_information: 'test@example.com',
+    scandal: '',
+    other: '',
+    website: '',
+    form_token: ''
+  };
+
+  return new URLSearchParams({
+    ...basePayload,
+    ...overrides
+  }).toString();
+}
+
 test('root page renders successfully', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/');
@@ -200,6 +228,8 @@ test('form page includes school name and address autocomplete hooks', async () =
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /id="school_results_list"/);
   assert.match(response.body, /id="address_results_list"/);
+  assert.match(response.body, /name="website"/);
+  assert.match(response.body, /name="form_token"/);
   assert.match(response.body, /\/js\/map_data_store\.js/);
 });
 
@@ -490,6 +520,47 @@ test('map timer renders elapsed seconds and adds refresh control after the refre
   assert.equal(refreshTriggered, true);
 });
 
+test('form protection tokens reject honeypot, tampering, and overly fast submissions', () => {
+  clearProjectModules();
+  const {
+    issueFormProtectionToken,
+    validateFormProtection
+  } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const issuedAt = 1_700_000_000_000;
+  const token = issueFormProtectionToken({
+    secret: 'test-form-protection-secret',
+    issuedAt
+  });
+
+  assert.equal(validateFormProtection({
+    token,
+    secret: 'test-form-protection-secret',
+    now: issuedAt + 3500,
+    minFillMs: 3000,
+    maxAgeMs: 10000
+  }).ok, true);
+
+  assert.equal(validateFormProtection({
+    token,
+    honeypotValue: 'https://spam.example',
+    secret: 'test-form-protection-secret',
+    now: issuedAt + 3500
+  }).reason, 'honeypot_filled');
+
+  assert.equal(validateFormProtection({
+    token,
+    secret: 'test-form-protection-secret',
+    now: issuedAt + 1500,
+    minFillMs: 3000
+  }).reason, 'submitted_too_quickly');
+
+  assert.equal(validateFormProtection({
+    token: `${token.slice(0, -1)}${token.endsWith('0') ? '1' : '0'}`,
+    secret: 'test-form-protection-secret',
+    now: issuedAt + 3500
+  }).reason, 'invalid_token');
+});
+
 test('form autocomplete records are deduplicated and searchable by both school name and address', () => {
   clearProjectModules();
   const { buildAutocompleteRecords, getAutocompleteSuggestions } = require(path.join(projectRoot, 'public/js/form_api'));
@@ -509,6 +580,91 @@ test('form autocomplete records are deduplicated and searchable by both school n
     getAutocompleteSuggestions(records, '泉城路', 'address').map((record) => record.addr),
     ['山东省济南市历下区泉城路 8 号']
   );
+});
+
+test('submit route rejects honeypot submissions with a generic protection error', async () => {
+  clearProjectModules();
+  const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    FORM_DRY_RUN: 'true',
+    FORM_PROTECTION_SECRET: 'test-form-protection-secret'
+  });
+  const response = await requestApp(app, {
+    path: '/submit',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: buildValidSubmissionBody({
+      website: 'https://spam.example',
+      form_token: issueFormProtectionToken({
+        secret: 'test-form-protection-secret',
+        issuedAt: Date.now() - 5000
+      })
+    })
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /提交已失效或异常/);
+  clearProjectModules();
+});
+
+test('submit route rejects submissions that arrive too quickly', async () => {
+  clearProjectModules();
+  const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    FORM_DRY_RUN: 'true',
+    FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+    FORM_PROTECTION_MIN_FILL_MS: '3000'
+  });
+  const response = await requestApp(app, {
+    path: '/submit',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: buildValidSubmissionBody({
+      form_token: issueFormProtectionToken({
+        secret: 'test-form-protection-secret',
+        issuedAt: Date.now() - 500
+      })
+    })
+  });
+
+  assert.equal(response.statusCode, 400);
+  assert.match(response.body, /提交已失效或异常/);
+  clearProjectModules();
+});
+
+test('submit route still accepts a valid protected form in dry run mode', async () => {
+  clearProjectModules();
+  const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    FORM_DRY_RUN: 'true',
+    FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+    FORM_PROTECTION_MIN_FILL_MS: '3000'
+  });
+  const response = await requestApp(app, {
+    path: '/submit',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: buildValidSubmissionBody({
+      form_token: issueFormProtectionToken({
+        secret: 'test-form-protection-secret',
+        issuedAt: Date.now() - 5000
+      })
+    })
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /entry\.5034928/);
+  assert.match(response.body, /测试学校/);
+  clearProjectModules();
 });
 
 test('map data service can bypass in-memory cache on force refresh', async () => {

@@ -7,6 +7,12 @@
     <p class="form-subtitle"><%= t('form.subtitle') %></p>
 
     <form action="/submit" method="POST" id="mainForm">
+        <div class="form-honeypot" aria-hidden="true">
+            <label for="website">Website</label>
+            <input type="text" name="website" id="website" tabindex="-1" autocomplete="off" spellcheck="false">
+        </div>
+        <input type="hidden" name="form_token" value="<%= formProtectionToken %>">
+
         <h3><%= t('form.sections.basic') %></h3>
         
         <div class="form-group">
