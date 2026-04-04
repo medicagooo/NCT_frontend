@@ -1,8 +1,8 @@
 (() => {
 function getColor(d) {
-    return d > 200 ? '#800026' :
-           d > 100  ? '#BD0026' :
-           d > 70  ? '#E31A1C' :
+    return d > 300 ? '#800026' :
+           d > 200  ? '#BD0026' :
+           d > 100  ? '#E31A1C' :
            d > 50  ? '#FC4E2A' :
            d > 20   ? '#FD8D3C' :
            d > 10   ? '#FEB24C' :
@@ -399,7 +399,7 @@ window.getSharedMapData()
             .catch(err => console.error('加载地图数据失败:', err));
 
         const statistics = jsonResponse.statistics
-        const provinceChart = new Chart(document.getElementById('prov'), {
+        const provinceChart = new Chart(document.getElementById('prov'), {//帶批處理的各省數據，這個可以表示所有的分佈數據
             type: 'pie',
             data: {
                 labels: statistics.map(item => getProvinceDisplay(item.province)),
@@ -419,6 +419,28 @@ window.getSharedMapData()
             options: createProvincePieChartOptions()
         });
         chartInstances.push(provinceChart);
+
+        const statisticsForm = jsonResponse.statistics;
+        const provinceChartForm = new Chart(document.getElementById('provForm'), {//提交的表單的各省數據
+            type: 'pie',
+            data: {
+                labels: statisticsForm.map(item => getProvinceDisplay(item.province)),
+                datasets:[{
+                    data: statisticsForm.map(item => item.count),
+                    backgroundColor: [
+                        '#ff6384', '#36a2eb', '#ffce56', '#4bc0c0', '#9966ff',
+                        '#ff9f40', '#4ed5b0', '#f44336', '#8bc34a', '#2196f3',
+                        '#e91e63', '#00bcd4', '#cddc39', '#ff5722', '#795548',
+                        '#607d8b', '#8bc34a', '#b39ddb', '#ffab91', '#d1c4e9',
+                        '#fff59d', '#ffe0b2', '#b2dfdb', '#cfd8dc', '#ffccbc',
+                        '#f8bbd0', '#e1bee7', '#d1c4e9', '#c8e6c9', '#ffecb3',
+                        '#fff9c4', '#f0f4c3', '#d7ccc8', '#f5f5f5', '#eeeeee'
+                    ]
+                }]
+            },
+            options: createProvincePieChartOptions()
+        });
+        chartInstances.push(provinceChartForm);
 
         const lastSyncedElement = document.getElementById('lastSynced');
         let lastSyncedTime = Number(jsonResponse.last_synced);
@@ -465,24 +487,21 @@ window.getSharedMapData()
 
         let count_num0 = 0;
         let count_num1 = 0;
-        let count_num2 = 0;
         data.forEach(item => {
             if(item.inputType == '受害者本人') count_num0++;
             if(item.inputType == '受害者的代理人')count_num1++;
-            if(!item.inputType)count_num2++;
         })
         const updatedFormChart = new Chart(document.getElementById('updatedForm'), {
         type: 'bar',
             data: {
                 labels: [
                     i18n.map.tags.self,
-                    i18n.map.tags.agent,
-                    i18n.map.tags.bulk
+                    i18n.map.tags.agent
                 ],
                 datasets: [{
                     label: i18n.map.stats.submittedForms,
-                    data: [count_num0, count_num1, count_num2],
-                    backgroundColor: ['#ff6384','#36a2eb','#ffce56'],
+                    data: [count_num0, count_num1],
+                    backgroundColor: ['#ff6384','#36a2eb'],
                     borderRadius: 999,
                     borderSkipped: false,
                     barPercentage: 0.7,
