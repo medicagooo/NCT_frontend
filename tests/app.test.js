@@ -1,4 +1,5 @@
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
 const http = require('node:http');
 const path = require('node:path');
 const test = require('node:test');
@@ -296,6 +297,16 @@ test('map page keeps an OSM-compatible referrer policy for tile requests', async
 
   assert.equal(response.statusCode, 200);
   assert.equal(response.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+});
+
+test('vercel config preserves an OSM-compatible referrer policy at the edge', () => {
+  const vercelConfig = JSON.parse(fs.readFileSync(path.join(projectRoot, 'vercel.json'), 'utf8'));
+  const referrerHeader = (Array.isArray(vercelConfig.headers) ? vercelConfig.headers : [])
+    .flatMap((headerRule) => Array.isArray(headerRule.headers) ? headerRule.headers : [])
+    .find((header) => String(header && header.key || '').toLowerCase() === 'referrer-policy');
+
+  assert.ok(referrerHeader);
+  assert.equal(referrerHeader.value, 'strict-origin-when-cross-origin');
 });
 
 test('form page includes school name and address autocomplete hooks', async () => {
