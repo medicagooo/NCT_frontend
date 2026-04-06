@@ -22,6 +22,9 @@
                     <option value="<%= option.value %>"><%= option.label %></option>
                 <% }) %>
             </select>
+        </div>
+
+        <div class="form-group">
             <label class="required" id="birthDateLabel" for="birthYearSelect"><%= t('form.fields.birthDate') %></label>
             <div class="birth-date-group" role="group" aria-labelledby="birthDateLabel">
                 <select name="birth_year" id="birthYearSelect" required>
