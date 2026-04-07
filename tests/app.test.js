@@ -429,6 +429,21 @@ test('map page ignores ASSET_VERSION=0 and falls back to a real cache-busting ve
   });
 });
 
+test('map page ignores app locals assetVersion=0 and rewrites it before rendering', async () => {
+  await withMockedDate('2026-04-07T12:46:00.000Z', async () => {
+    const app = loadApp({ DEBUG_MOD: 'false' });
+    app.locals.assetVersion = '0';
+
+    const response = await requestPath(app, '/map');
+
+    assert.equal(response.statusCode, 200);
+    assert.doesNotMatch(response.body, /window\.ASSET_VERSION = "0"/);
+    assert.match(response.body, /window\.ASSET_VERSION = "1775565960000"/);
+    assert.match(response.body, /\/js\/map_api\.js\?v=1775565960000/);
+    assert.match(response.body, /\/js\/map_province_utils\.js\?v=1775565960000/);
+  });
+});
+
 test('map page keeps an OSM-compatible referrer policy for tile requests', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/map');
