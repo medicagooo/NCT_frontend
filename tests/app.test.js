@@ -1596,6 +1596,67 @@ test('map data service falls back to direct IPv4 requests when direct fetch fail
   });
 });
 
+test('map data service retries with fetch and skips Node-only transport fallbacks in workers runtime', async () => {
+  await withEnvOverrides({
+    ...getNoProxyEnv(),
+    RUNTIME_TARGET: 'workers'
+  }, async () => {
+    clearProjectModules();
+    const axios = require('axios');
+    const mapDataService = require(path.join(projectRoot, 'app/services/mapDataService'));
+    const originalGet = axios.get;
+    const originalFetch = global.fetch;
+    let fetchCount = 0;
+    let axiosCount = 0;
+
+    mapDataService.resetMapDataCache();
+    global.fetch = async () => {
+      fetchCount += 1;
+
+      if (fetchCount === 1) {
+        const error = new TypeError('fetch failed');
+        error.cause = {
+          name: 'TimeoutError',
+          code: 23,
+          message: 'The operation was aborted due to timeout'
+        };
+        throw error;
+      }
+
+      return {
+        ok: true,
+        async json() {
+          return {
+            avg_age: 18,
+            last_synced: 1000,
+            schoolNum: 4,
+            formNum: 2,
+            statistics: [],
+            statisticsForm: [],
+            data: []
+          };
+        }
+      };
+    };
+    axios.get = async () => {
+      axiosCount += 1;
+      throw new Error('axios fallback should not be used in workers runtime');
+    };
+
+    try {
+      const result = await mapDataService.getMapData({ publicMapDataUrl: 'https://example.com/api/map-data' });
+
+      assert.equal(result.schoolNum, 4);
+      assert.equal(fetchCount, 2);
+      assert.equal(axiosCount, 0);
+    } finally {
+      axios.get = originalGet;
+      global.fetch = originalFetch;
+      mapDataService.resetMapDataCache();
+    }
+  });
+});
+
 test('public map API keeps CORS enabled while translate API stays same-origin only', async () => {
   await withEnvOverrides(getNoProxyEnv(), async () => {
     const originalFetch = global.fetch;

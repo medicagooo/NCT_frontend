@@ -2,6 +2,7 @@ const axios = require('axios');
 const http = require('http');
 const https = require('https');
 const { getProvinceCodeLabels } = require('../../config/i18n');
+const { isWorkersRuntime } = require('../../config/runtimeConfig');
 
 // 地图数据缓存放在 service 层，避免每次请求都直打 Apps Script。
 let cachedData = null;
@@ -232,8 +233,9 @@ async function fetchJsonDirectIpv4(dataSourceUrl) {
 async function fetchMapPayloadFromSource(dataSourceUrl) {
   const strategies = [];
   let lastError = null;
+  const workersRuntime = isWorkersRuntime();
 
-  if (hasProxyConfiguration()) {
+  if (!workersRuntime && hasProxyConfiguration()) {
     strategies.push({
       name: 'proxy-agent',
       request: () => fetchJsonThroughProxy(dataSourceUrl)
@@ -244,10 +246,18 @@ async function fetchMapPayloadFromSource(dataSourceUrl) {
     name: 'direct-fetch',
     request: () => fetchJsonDirect(dataSourceUrl)
   });
-  strategies.push({
-    name: 'direct-ipv4',
-    request: () => fetchJsonDirectIpv4(dataSourceUrl)
-  });
+
+  if (workersRuntime) {
+    strategies.push({
+      name: 'direct-fetch-retry',
+      request: () => fetchJsonDirect(dataSourceUrl)
+    });
+  } else {
+    strategies.push({
+      name: 'direct-ipv4',
+      request: () => fetchJsonDirectIpv4(dataSourceUrl)
+    });
+  }
 
   const attemptDiagnostics = [];
 
