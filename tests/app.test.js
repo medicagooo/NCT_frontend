@@ -558,7 +558,7 @@ test('form page includes school name and address autocomplete hooks', async () =
   const response = await requestPath(app, '/form');
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /隐私说明：本问卷中个人基本信息将被严格保密/);
+  assert.match(response.body, /隐私说明：本问卷中填写的出生年份、性别等个人基本信息将被严格保密/);
   assert.match(response.body, /个人基本信息/);
   assert.match(response.body, /相关经历/);
   assert.match(response.body, /机构曝光信息/);
@@ -762,7 +762,7 @@ test('about page renders localized friend descriptions in english mode', async (
   assert.match(response.body, /Domain contributor/);
 });
 
-test('privacy page documents the language cookie and footer exposes the link', async () => {
+test('privacy page documents the language cookie, form-disclosure flow, and footer exposes the link', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const rootResponse = await requestPath(app, '/');
   const privacyResponse = await requestPath(app, '/privacy?lang=en');
@@ -772,6 +772,11 @@ test('privacy page documents the language cookie and footer exposes the link', a
 
   assert.equal(privacyResponse.statusCode, 200);
   assert.match(privacyResponse.body, /Privacy &amp; Cookie Notice|Privacy & Cookie Notice/);
+  assert.match(privacyResponse.body, /Form Submission And Public Display/);
+  assert.match(privacyResponse.body, /Third-Party Services/);
+  assert.match(privacyResponse.body, /Retention And Removal/);
+  assert.match(privacyResponse.body, /Public Data/);
+  assert.match(privacyResponse.body, /href="https:\/\/docs\.google\.com\/spreadsheets\/d\/12GSD0Hzi0P6q3B9V4-DT9SOQghL8zV2A-7FsWFYhFxk"/);
   assert.match(privacyResponse.body, /<code>lang<\/code>/);
   assert.match(privacyResponse.body, /2592000/);
   assert.match(privacyResponse.body, /SameSite=Lax/);
@@ -1158,9 +1163,20 @@ test('sitemap service falls back to article metadata timestamps in workers mode'
       siteUrl: 'https://example.com'
     });
 
-    assert.equal(entries.length, 2);
-    assert.equal(entries[0].lastmod, '2026-03-13T00:00:00.000Z');
-    assert.equal(entries[1].lastmod, '2026-04-03T00:00:00.000Z');
+    const lastmodByLoc = new Map(entries.map((entry) => [entry.loc, entry.lastmod]));
+
+    assert.equal(
+      lastmodByLoc.get('https://example.com/port/%E9%97%9C%E6%96%BC%E5%BF%83%E7%A8%AE%E5%AD%90%E6%95%99%E8%82%B2%E9%81%95%E6%B3%95%E8%BE%A6%E5%AD%B8%E7%9A%84%E6%8E%A7%E5%91%8A'),
+      '2026-03-13T00:00:00.000Z'
+    );
+    assert.equal(
+      lastmodByLoc.get('https://example.com/port/%E9%80%83%E8%B7%91%E6%8C%87%E5%8D%97'),
+      '2026-03-13T00:00:00.000Z'
+    );
+    assert.equal(
+      lastmodByLoc.get('https://example.com/port/NCT%E5%9B%BE%E6%A0%87%E8%AE%BE%E8%AE%A1%E5%A4%A7%E8%B5%9B'),
+      '2026-04-03T00:00:00.000Z'
+    );
   });
 
   clearProjectModules();
@@ -1442,6 +1458,7 @@ test('submit route rejects submissions that arrive too quickly', async () => {
 test('submit route still accepts a valid protected form in dry run mode', async () => {
   clearProjectModules();
   const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const expectedAge = new Date().getUTCFullYear() - 2008;
   const app = loadApp({
     DEBUG_MOD: 'false',
     FORM_DRY_RUN: 'true',
@@ -1469,19 +1486,18 @@ test('submit route still accepts a valid protected form in dry run mode', async 
   assert.match(response.body, /<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">/);
   assert.match(response.body, /entry\.5034928/);
   assert.match(response.body, /测试机构/);
-  assert.match(response.body, /entry\.842223433_year/);
-  assert.match(response.body, /entry\.842223433_month/);
-  assert.match(response.body, /entry\.842223433_day/);
-  assert.match(response.body, />2008</);
-  assert.match(response.body, /entry\.842223433_month<\/code><\/td>\s*<td>出生月份<\/td>\s*<td>1<\/td>/);
-  assert.match(response.body, /entry\.842223433_day<\/code><\/td>\s*<td>出生日期<\/td>\s*<td>1<\/td>/);
-  assert.doesNotMatch(response.body, /entry\.842223433<\/code>/);
+  assert.match(response.body, new RegExp(`entry\\.842223433</code></td>\\s*<td>出生年份</td>\\s*<td>${expectedAge}</td>`));
+  assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>性别<\/td>\s*<td>男<\/td>/);
+  assert.doesNotMatch(response.body, /entry\.842223433_year/);
+  assert.doesNotMatch(response.body, /entry\.842223433_month/);
+  assert.doesNotMatch(response.body, /entry\.842223433_day/);
   clearProjectModules();
 });
 
 test('submit route accepts agent submissions with MtF selected for other gender identity in dry run mode', async () => {
   clearProjectModules();
   const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const expectedAge = new Date().getUTCFullYear() - 2008;
   const app = loadApp({
     DEBUG_MOD: 'false',
     FORM_DRY_RUN: 'true',
@@ -1507,7 +1523,7 @@ test('submit route accepts agent submissions with MtF selected for other gender 
   });
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /entry\.842223433_year<\/code><\/td>\s*<td>受害者出生年份<\/td>\s*<td>2008<\/td>/);
+  assert.match(response.body, new RegExp(`entry\\.842223433</code></td>\\s*<td>受害者出生年份</td>\\s*<td>${expectedAge}</td>`));
   assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>受害者性别<\/td>\s*<td>MtF<\/td>/);
   clearProjectModules();
 });
@@ -1539,7 +1555,8 @@ test('submit route accepts custom other gender identity text in dry run mode', a
   });
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>性别<\/td>\s*<td>非二元<\/td>/);
+  assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>性别<\/td>\s*<td>__other_option__<\/td>/);
+  assert.match(response.body, /entry\.1422578992\.other_option_response<\/code><\/td>\s*<td>性别<\/td>\s*<td>非二元<\/td>/);
   clearProjectModules();
 });
 
@@ -1569,7 +1586,8 @@ test('submit route accepts Queer selected for other gender identity in dry run m
   });
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>性别<\/td>\s*<td>Queer<\/td>/);
+  assert.match(response.body, /entry\.1422578992<\/code><\/td>\s*<td>性别<\/td>\s*<td>__other_option__<\/td>/);
+  assert.match(response.body, /entry\.1422578992\.other_option_response<\/code><\/td>\s*<td>性别<\/td>\s*<td>Queer<\/td>/);
   clearProjectModules();
 });
 
@@ -1792,28 +1810,83 @@ test('submit route rejects invalid victim birth year values for agent submission
 });
 
 test('submitToGoogleForm stops at redirect responses instead of following them', { concurrency: false }, async () => {
-  clearProjectModules();
-  const axios = require('axios');
-  const originalPost = axios.post;
-  const capturedCalls = [];
-
-  axios.post = async (...args) => {
-    capturedCalls.push(args);
-    return { status: 302 };
-  };
-
-  try {
-    const { submitToGoogleForm } = require(path.join(projectRoot, 'app/services/formService'));
-    await submitToGoogleForm('https://docs.google.com/forms/d/e/test/formResponse', 'entry.1=value');
-
-    assert.equal(capturedCalls.length, 1);
-    assert.equal(capturedCalls[0][2].maxRedirects, 0);
-    assert.equal(capturedCalls[0][2].validateStatus(302), true);
-    assert.equal(capturedCalls[0][2].validateStatus(400), false);
-  } finally {
-    axios.post = originalPost;
+  await withEnvOverrides(getNoProxyEnv(), async () => {
     clearProjectModules();
-  }
+    const axios = require('axios');
+    const originalPost = axios.post;
+    const capturedCalls = [];
+
+    axios.post = async (...args) => {
+      capturedCalls.push(args);
+      return { status: 302 };
+    };
+
+    try {
+      const { submitToGoogleForm } = require(path.join(projectRoot, 'app/services/formService'));
+      await submitToGoogleForm('https://docs.google.com/forms/d/e/test/formResponse', 'entry.1=value');
+
+      assert.equal(capturedCalls.length, 1);
+      assert.equal(capturedCalls[0][2].maxRedirects, 0);
+      assert.equal(capturedCalls[0][2].validateStatus(302), true);
+      assert.equal(capturedCalls[0][2].validateStatus(400), false);
+    } finally {
+      axios.post = originalPost;
+      clearProjectModules();
+    }
+  });
+});
+
+test('submitToGoogleForm uses ProxyAgent when proxy env is configured', { concurrency: false }, async () => {
+  await withEnvOverrides({
+    ...getNoProxyEnv(),
+    HTTP_PROXY: 'http://proxy.example:8080',
+    HTTPS_PROXY: 'http://proxy.example:8080',
+    ALL_PROXY: 'socks5://proxy.example:1080',
+    http_proxy: 'http://proxy.example:8080',
+    https_proxy: 'http://proxy.example:8080',
+    all_proxy: 'socks5://proxy.example:1080'
+  }, async () => {
+    clearProjectModules();
+    const axios = require('axios');
+    const proxyAgentModulePath = require.resolve('proxy-agent');
+    const originalProxyAgentModule = require.cache[proxyAgentModulePath];
+    const originalPost = axios.post;
+    const capturedCalls = [];
+
+    class FakeProxyAgent {}
+
+    require.cache[proxyAgentModulePath] = {
+      id: proxyAgentModulePath,
+      filename: proxyAgentModulePath,
+      loaded: true,
+      exports: {
+        ProxyAgent: FakeProxyAgent
+      }
+    };
+
+    axios.post = async (...args) => {
+      capturedCalls.push(args);
+      return { status: 200 };
+    };
+
+    try {
+      const { submitToGoogleForm } = require(path.join(projectRoot, 'app/services/formService'));
+      await submitToGoogleForm('https://docs.google.com/forms/d/e/test/formResponse', 'entry.1=value');
+
+      assert.equal(capturedCalls.length, 1);
+      assert.equal(capturedCalls[0][2].proxy, false);
+      assert.ok(capturedCalls[0][2].httpAgent instanceof FakeProxyAgent);
+      assert.ok(capturedCalls[0][2].httpsAgent instanceof FakeProxyAgent);
+    } finally {
+      axios.post = originalPost;
+      if (originalProxyAgentModule) {
+        require.cache[proxyAgentModulePath] = originalProxyAgentModule;
+      } else {
+        delete require.cache[proxyAgentModulePath];
+      }
+      clearProjectModules();
+    }
+  });
 });
 
 test('map data service can bypass in-memory cache on force refresh', async () => {
@@ -1850,6 +1923,86 @@ test('map data service can bypass in-memory cache on force refresh', async () =>
     }
 
     assert.equal(fetchCount, 2);
+  });
+});
+
+test('map data service temporarily serves public fallback data and upgrades to GOOGLE_SCRIPT_URL when it succeeds later', async () => {
+  await withEnvOverrides(getNoProxyEnv(), async () => {
+    clearProjectModules();
+    const mapDataService = require(path.join(projectRoot, 'app/services/mapDataService'));
+    const originalFetch = global.fetch;
+
+    mapDataService.resetMapDataCache();
+    global.fetch = async (url) => {
+      if (url === 'https://private.example/map-data') {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+
+        return {
+          ok: true,
+          async json() {
+            return {
+              avg_age: 21,
+              last_synced: 2000,
+              schoolNum: 9,
+              formNum: 5,
+              statistics: [],
+              statisticsForm: [],
+              data: [
+                { province: '北京', lat: 39.9, lng: 116.4 }
+              ]
+            };
+          }
+        };
+      }
+
+      if (url === 'https://public.example/map-data') {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+
+        return {
+          ok: true,
+          async json() {
+            return {
+              avg_age: 18,
+              last_synced: 1000,
+              schoolNum: 3,
+              formNum: 2,
+              statistics: [],
+              statisticsForm: [],
+              data: [
+                { province: '上海', lat: 31.2, lng: 121.5 }
+              ]
+            };
+          }
+        };
+      }
+
+      throw new Error(`unexpected url: ${url}`);
+    };
+
+    try {
+      const initialResult = await mapDataService.getMapData({
+        googleScriptUrl: 'https://private.example/map-data',
+        publicMapDataUrl: 'https://public.example/map-data'
+      });
+
+      assert.equal(initialResult.source, 'public-map-data');
+      assert.equal(initialResult.isSourceFallback, true);
+      assert.equal(initialResult.schoolNum, 3);
+
+      await new Promise((resolve) => setTimeout(resolve, 80));
+
+      const upgradedResult = await mapDataService.getMapData({
+        googleScriptUrl: 'https://private.example/map-data',
+        publicMapDataUrl: 'https://public.example/map-data'
+      });
+
+      assert.equal(upgradedResult.source, 'google-script');
+      assert.equal(upgradedResult.isSourceFallback, false);
+      assert.equal(upgradedResult.schoolNum, 9);
+    } finally {
+      global.fetch = originalFetch;
+      mapDataService.resetMapDataCache();
+    }
   });
 });
 

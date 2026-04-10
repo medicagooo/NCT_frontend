@@ -10,6 +10,8 @@ const {
   getSexLabelKey,
   OTHER_SEX_OPTION
 } = require('../../config/formConfig');
+let ProxyAgentConstructor = null;
+let cachedProxyAgent = null;
 
 // 提交前统一做 trim，避免首尾空格造成前后端校验不一致。
 function getTrimmedString(value) {
@@ -28,19 +30,6 @@ function parseIntegerString(value) {
 
 function padNumber(value) {
   return String(value).padStart(2, '0');
-}
-
-function splitDateString(value) {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return null;
-  }
-
-  return {
-    year: match[1],
-    month: String(Number(match[2])),
-    day: String(Number(match[3]))
-  };
 }
 
 // 只接受 YYYY-MM-DD，且必须是一个真实存在的日期。
@@ -79,6 +68,7 @@ function buildNormalizedSexValue(sex, sexOtherType, sexOther) {
     return sex;
   }
 
+  // “其他性别认同”最终会折叠成一个字符串，便于继续映射到单个 Google Form 字段。
   if (sexOtherType === CUSTOM_OTHER_SEX_OPTION) {
     return sexOther;
   }
@@ -88,6 +78,67 @@ function buildNormalizedSexValue(sex, sexOtherType, sexOther) {
   }
 
   return sexOtherType || sexOther;
+}
+
+function hasProxyConfiguration() {
+  return [
+    process.env.HTTPS_PROXY,
+    process.env.https_proxy,
+    process.env.HTTP_PROXY,
+    process.env.http_proxy,
+    process.env.ALL_PROXY,
+    process.env.all_proxy
+  ].some((value) => typeof value === 'string' && value.trim());
+}
+
+function getProxyAgent() {
+  if (!cachedProxyAgent) {
+    if (!ProxyAgentConstructor) {
+      ({ ProxyAgent: ProxyAgentConstructor } = require('proxy-agent'));
+    }
+
+    cachedProxyAgent = new ProxyAgentConstructor();
+  }
+
+  return cachedProxyAgent;
+}
+
+function normalizeGoogleFormProvinceValue(province) {
+  return province === '臺灣' ? '臺灣（ROC）' : province;
+}
+
+function calculateApproximateAgeFromBirthYear(birthYear, now = new Date()) {
+  if (!Number.isInteger(birthYear)) {
+    return null;
+  }
+
+  return now.getUTCFullYear() - birthYear;
+}
+
+function buildGoogleFormSexFields(sexLabel, sexValue) {
+  if (sexValue === '男性') {
+    return [
+      { entryId: 'entry.1422578992', label: sexLabel, value: '男' }
+    ];
+  }
+
+  if (sexValue === '女性') {
+    return [
+      { entryId: 'entry.1422578992', label: sexLabel, value: '女' }
+    ];
+  }
+
+  if (sexValue === 'MtF' || sexValue === 'FtM') {
+    return [
+      { entryId: 'entry.1422578992', label: sexLabel, value: sexValue }
+    ];
+  }
+
+  // Google Form 的当前性别题型是单选 + “Other” 文本输入，因此需要拆成两个字段。
+  return [
+    { entryId: 'entry.1422578992', label: sexLabel, value: OTHER_SEX_OPTION },
+    { entryId: 'entry.1422578992.other_option_response', label: sexLabel, value: sexValue }
+  ];
 }
 
 // 把前端表单请求体校验并整理成后续可直接发往 Google Form 的结构。
@@ -146,9 +197,11 @@ function validateSubmission(body, t) {
     maxLength: formRules.other.maxLength
   });
   let birthDate = '';
+  let googleFormAge = null;
   let validatedLocation = null;
   let validatedCounty = null;
 
+  // 当前表单只采集出生年份，所以月/日会用规则定义里的最小值补齐成合法日期。
   if (!birthYearValue) {
     errors.push(t('formErrors.required', { label: formRules.birthYear.label }));
   } else {
@@ -163,6 +216,16 @@ function validateSubmission(body, t) {
 
       if (!validateDateString(birthDate)) {
         errors.push(t('formErrors.invalidBirthDate', { label: formRules.birthYear.label }));
+      } else {
+        googleFormAge = calculateApproximateAgeFromBirthYear(birthYear);
+
+        if (!Number.isInteger(googleFormAge) || googleFormAge < 0 || googleFormAge > 100) {
+          errors.push(t('formErrors.ageRange', {
+            label: formRules.birthYear.label,
+            min: 0,
+            max: 100
+          }));
+        }
       }
     }
   }
@@ -198,6 +261,7 @@ function validateSubmission(body, t) {
   }
 
   if (provinceCode && cityCode) {
+    // 省市联动数据来自统一配置，后端再次校验可以防止用户手工篡改 option value。
     validatedLocation = validateProvinceAndCity(provinceCode, cityCode);
     if (!validatedLocation) {
       errors.push(t('formErrors.provinceCityMismatch'));
@@ -232,6 +296,7 @@ function validateSubmission(body, t) {
     errors,
     values: {
       birthDate,
+      googleFormAge,
       birthYear: birthYearValue,
       birthMonth: birthMonthValue,
       birthDay: birthDayValue,
@@ -256,19 +321,17 @@ function validateSubmission(body, t) {
 
 // 这里维护的是“站内字段 -> Google Form entry.xxx” 的最终映射。
 function buildGoogleFormFields(values, t) {
-  const birthDateParts = splitDateString(values.birthDate);
   const birthYearLabel = t(getBirthYearLabelKey(values.identity));
   const sexLabel = t(getSexLabelKey(values.identity));
   const cityValue = [values.city, values.county].filter(Boolean).join(' ');
   const fields = [
-    { entryId: 'entry.842223433_year', label: birthYearLabel, value: birthDateParts ? birthDateParts.year : values.birthYear },
-    { entryId: 'entry.842223433_month', label: t('fields.birthMonth'), value: birthDateParts ? birthDateParts.month : values.birthMonth },
-    { entryId: 'entry.842223433_day', label: t('fields.birthDay'), value: birthDateParts ? birthDateParts.day : values.birthDay },
-    { entryId: 'entry.1766160152', label: t('previewFields.province'), value: values.province },
+    // 线上 Google Form 仍沿用“年龄 + 旧性别选项”结构，这里统一做兼容转换。
+    { entryId: 'entry.842223433', label: birthYearLabel, value: values.googleFormAge },
+    { entryId: 'entry.1766160152', label: t('previewFields.province'), value: normalizeGoogleFormProvinceValue(values.province) },
     { entryId: 'entry.402227428', label: t('previewFields.city'), value: cityValue },
     { entryId: 'entry.5034928', label: t('previewFields.schoolName'), value: values.schoolName },
     { entryId: 'entry.500021634', label: t('previewFields.identity'), value: values.identity },
-    { entryId: 'entry.1422578992', label: sexLabel, value: values.sex },
+    ...buildGoogleFormSexFields(sexLabel, values.sex),
     { entryId: 'entry.1390240202', label: t('previewFields.schoolAddress'), value: values.schoolAddress },
     { entryId: 'entry.578287646', label: t('previewFields.experience'), value: values.experience },
     { entryId: 'entry.1533497153', label: t('previewFields.headmasterName'), value: values.headmasterName },
@@ -289,6 +352,7 @@ function buildGoogleFormFields(values, t) {
 }
 
 function buildConfirmationFields(values, t) {
+  // 确认页展示使用“用户可读标签”，不暴露 Google Form 的 entry id。
   return [
     { label: t('form.fields.identity'), value: values.identity },
     { label: t(getBirthYearLabelKey(values.identity)), value: values.birthYear },
@@ -323,14 +387,24 @@ async function submitToGoogleForm(googleFormUrl, encodedPayload) {
     throw new Error('未配置有效的 Google Form 提交地址');
   }
 
-  await axios.post(googleFormUrl, encodedPayload, {
+  const requestConfig = {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     timeout: 10000,
     maxRedirects: 0,
     validateStatus(status) {
       return status >= 200 && status < 400;
     }
-  });
+  };
+
+  if (hasProxyConfiguration()) {
+    const proxyAgent = getProxyAgent();
+
+    requestConfig.proxy = false;
+    requestConfig.httpAgent = proxyAgent;
+    requestConfig.httpsAgent = proxyAgent;
+  }
+
+  await axios.post(googleFormUrl, encodedPayload, requestConfig);
 }
 
 module.exports = {
