@@ -384,6 +384,7 @@ const messages = {
       title: '提交失败',
       intro: '站内提交没有成功。你可以打开下面这个已预填内容的 Google Form 链接继续提交。',
       privacyNote: '注意：下面这个链接包含你刚刚填写的表单内容，请不要随意分享。',
+      proxyNote: '提示：如果你当前网络无法直接访问 Google 服务，打开 Google Form 页面可能需要网络代理。',
       openFallback: '打开 Google Form 继续提交',
       urlLabel: '带预填内容的 Google Form 链接',
       backForm: '返回表单'
@@ -502,6 +503,7 @@ const messages = {
         disabled: '未启用',
         configured: '已配置',
         missing: '未配置',
+        unknown: '未知',
         explicit: '显式配置',
         derived: '派生值',
         memoryOnly: '仅内存模式',
@@ -889,6 +891,7 @@ const messages = {
       title: '提交失敗',
       intro: '站內提交沒有成功。你可以打開下面這個已預填內容的 Google Form 連結繼續提交。',
       privacyNote: '注意：下面這個連結包含你剛剛填寫的表單內容，請不要隨意分享。',
+      proxyNote: '提示：如果你目前的網路無法直接存取 Google 服務，打開 Google Form 頁面可能需要網路代理。',
       openFallback: '打開 Google Form 繼續提交',
       urlLabel: '帶預填內容的 Google Form 連結',
       backForm: '返回表單'
@@ -1007,6 +1010,7 @@ const messages = {
         disabled: '未啟用',
         configured: '已配置',
         missing: '未配置',
+        unknown: '未知',
         explicit: '顯式配置',
         derived: '派生值',
         memoryOnly: '僅記憶體模式',
@@ -1394,6 +1398,7 @@ const messages = {
       title: 'Submission Failed',
       intro: 'The in-site submission did not complete successfully. You can continue by opening the Google Form link below with your data prefilled.',
       privacyNote: 'Note: the link below contains the form content you just entered, so please do not share it casually.',
+      proxyNote: 'Note: if your current network cannot access Google services directly, opening the Google Form page may require a network proxy.',
       openFallback: 'Open Google Form to Continue',
       urlLabel: 'Prefilled Google Form Link',
       backForm: 'Back to Form'
@@ -1512,6 +1517,7 @@ const messages = {
         disabled: 'Disabled',
         configured: 'Configured',
         missing: 'Missing',
+        unknown: 'Unknown',
         explicit: 'Explicit',
         derived: 'Derived',
         memoryOnly: 'Memory Only',

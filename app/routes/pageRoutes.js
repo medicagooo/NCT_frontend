@@ -230,7 +230,7 @@ function buildDebugSections({
         { label: t('debug.labels.language'), value: requestPath.language },
         { label: t('debug.labels.requestPath'), value: requestPath.path, multiline: true },
         { label: t('debug.labels.runtime'), value: isWorkersRuntime ? statusValue.workers : statusValue.node },
-        { label: t('debug.labels.assetVersion'), value: assetVersion || 'unknown' }
+        { label: t('debug.labels.assetVersion'), value: assetVersion || t('debug.values.unknown') }
       ]
     },
     {

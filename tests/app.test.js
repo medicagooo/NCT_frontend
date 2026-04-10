@@ -754,6 +754,26 @@ test('debug page renders when debug mode is enabled', async () => {
   assert.match(response.body, /站点配置|Site Configuration/);
 });
 
+test('debug page respects explicit language selection', async () => {
+  const app = loadApp({ DEBUG_MOD: 'true' });
+  const englishResponse = await requestPath(app, '/debug?lang=en');
+  const traditionalChineseResponse = await requestPath(app, '/debug?lang=zh-TW');
+
+  assert.equal(englishResponse.statusCode, 200);
+  assert.match(englishResponse.body, /<html lang="en">/);
+  assert.match(englishResponse.body, /Back to Home/);
+  assert.match(englishResponse.body, /Site Configuration/);
+  assert.match(englishResponse.body, /Open submission error preview/);
+  assert.match(String(englishResponse.headers['set-cookie']), /lang=en/);
+
+  assert.equal(traditionalChineseResponse.statusCode, 200);
+  assert.match(traditionalChineseResponse.body, /<html lang="zh-TW">/);
+  assert.match(traditionalChineseResponse.body, /返回首頁/);
+  assert.match(traditionalChineseResponse.body, /站點配置/);
+  assert.match(traditionalChineseResponse.body, /查看提交失敗頁預覽/);
+  assert.match(String(traditionalChineseResponse.headers['set-cookie']), /lang=zh-TW/);
+});
+
 test('debug page redacts sensitive Google integration URLs', async () => {
   const app = loadApp({
     DEBUG_MOD: 'true',
@@ -781,6 +801,27 @@ test('standalone submit error preview renders a prefilled Google Form link when 
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /viewform\?usp=pp_url&amp;entry\.842223433=11/);
   assert.match(response.body, /entry\.1422578992=%E7%94%B7/);
+  assert.match(response.body, /打开 Google Form 页面可能需要网络代理|opening the Google Form page may require a network proxy/);
+});
+
+test('standalone submit error preview respects explicit language selection', async () => {
+  const app = loadApp({ DEBUG_MOD: 'true' });
+  const englishResponse = await requestPath(app, '/debug/submit-error?lang=en');
+  const traditionalChineseResponse = await requestPath(app, '/debug/submit-error?lang=zh-TW');
+
+  assert.equal(englishResponse.statusCode, 200);
+  assert.match(englishResponse.body, /<html lang="en">/);
+  assert.match(englishResponse.body, /Submission Failed/);
+  assert.match(englishResponse.body, /Open Google Form to Continue/);
+  assert.match(englishResponse.body, /opening the Google Form page may require a network proxy/);
+  assert.match(String(englishResponse.headers['set-cookie']), /lang=en/);
+
+  assert.equal(traditionalChineseResponse.statusCode, 200);
+  assert.match(traditionalChineseResponse.body, /<html lang="zh-TW">/);
+  assert.match(traditionalChineseResponse.body, /提交失敗/);
+  assert.match(traditionalChineseResponse.body, /打開 Google Form 繼續提交/);
+  assert.match(traditionalChineseResponse.body, /打開 Google Form 頁面可能需要網路代理/);
+  assert.match(String(traditionalChineseResponse.headers['set-cookie']), /lang=zh-TW/);
 });
 
 test('about page renders localized friend descriptions in english mode', async () => {
@@ -1789,6 +1830,7 @@ test('submit confirm route renders a prefilled Google Form fallback link when up
 
     assert.equal(confirmResponse.statusCode, 500);
     assert.match(confirmResponse.body, /打开 Google Form 继续提交|Open Google Form to Continue/);
+    assert.match(confirmResponse.body, /打开 Google Form 页面可能需要网络代理|opening the Google Form page may require a network proxy/);
     assert.match(confirmResponse.body, /viewform\?usp=pp_url&amp;entry\.842223433=/);
     assert.match(confirmResponse.body, /entry\.5034928=%E6%B5%8B%E8%AF%95%E6%9C%BA%E6%9E%84/);
     assert.match(confirmResponse.body, /entry\.500021634=%E5%8F%97%E5%AE%B3%E8%80%85%E6%9C%AC%E4%BA%BA/);

@@ -44,7 +44,6 @@ N·C·T is a site for documenting, organizing, and publicly presenting informati
 - Home page: https://victimsunion.org
 - Anonymous form: https://victimsunion.org/form
 - Public map: https://victimsunion.org/map
-- Original Google Form: https://forms.gle/eHwkmNCZtmZhLjzh7
 
 **Historical names and domains**
 

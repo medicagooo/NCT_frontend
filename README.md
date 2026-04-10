@@ -44,7 +44,6 @@ N·C·T 是一个用来记录、整理、公开展示“扭转治疗”相关机
 - 站点首页：https://victimsunion.org
 - 匿名表单：https://victimsunion.org/form
 - 公开地图：https://victimsunion.org/map
-- 原始 Google Form：https://forms.gle/eHwkmNCZtmZhLjzh7
 
 **历史曾用名和域名**
 
