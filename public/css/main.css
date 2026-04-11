@@ -2560,6 +2560,8 @@ hr {
     }
 
     .map-stats-grid {
+        display: flex;
+        flex-direction: column;
         grid-template-columns: 1fr;
         grid-template-rows: none;
         grid-auto-rows: auto;
@@ -2610,6 +2612,8 @@ hr {
     }
 
     .map-stat-card-stack {
+        display: flex;
+        flex-direction: column;
         grid-template-rows: none;
         grid-column: 1 / -1;
         min-height: 0;
