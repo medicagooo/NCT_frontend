@@ -38,6 +38,7 @@ const messages = {
       home: '首页|{title}',
       form: '填写表单|{title}',
       map: '地图|{title}',
+      mapRecord: '提交详情|{title}',
       about: '关于我们|{title}',
       privacy: '隐私政策与 Cookie 说明|{title}',
       submitPreview: '提交预览|{title}',
@@ -231,7 +232,7 @@ const messages = {
           form: '第 {current} / {total} 份表单'
         },
         formDetail: {
-          button: '查看表单详细信息',
+          button: '查看详情页',
           title: '表单详细信息',
           close: '关闭'
         },
@@ -245,7 +246,17 @@ const messages = {
           address: '地址：',
           contact: '联系方式：'
         },
-        viewDetails: '查看详细信息'
+        viewDetails: '查看详情页'
+      },
+      record: {
+        backToMap: '返回地图列表',
+        eyebrow: '提交详情',
+        loading: '正在加载提交详情...',
+        notFoundTitle: '未找到这份提交',
+        notFoundBody: '这份提交可能已被合并、删除或暂时不可用。你可以返回地图列表继续查看。',
+        loadFailedTitle: '提交详情加载失败',
+        loadFailedBody: '暂时无法加载这份提交，请稍后重试。',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: '想要调用 API？',
@@ -551,6 +562,7 @@ const messages = {
       home: '主頁|{title}',
       form: '填寫表單|{title}',
       map: '地圖|{title}',
+      mapRecord: '提交詳情|{title}',
       about: '關於我們|{title}',
       privacy: '隱私政策與 Cookie 說明|{title}',
       submitPreview: '提交預覽|{title}',
@@ -744,7 +756,7 @@ const messages = {
           form: '第 {current} / {total} 份表單'
         },
         formDetail: {
-          button: '查看表單詳細資訊',
+          button: '查看詳情頁',
           title: '表單詳細資訊',
           close: '關閉'
         },
@@ -758,7 +770,17 @@ const messages = {
           address: '地址：',
           contact: '聯繫方式：'
         },
-        viewDetails: '查看詳細信息'
+        viewDetails: '查看詳情頁'
+      },
+      record: {
+        backToMap: '返回地圖列表',
+        eyebrow: '提交詳情',
+        loading: '正在載入提交詳情...',
+        notFoundTitle: '找不到這份提交',
+        notFoundBody: '這份提交可能已被合併、刪除，或暫時無法公開。你可以返回地圖列表繼續查看。',
+        loadFailedTitle: '提交詳情載入失敗',
+        loadFailedBody: '暫時無法載入這份提交，請稍後再試。',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: '想要調用 API？',
@@ -1064,6 +1086,7 @@ const messages = {
       home: 'Home | {title}',
       form: 'Form | {title}',
       map: 'Map | {title}',
+      mapRecord: 'Submission Detail | {title}',
       about: 'About | {title}',
       privacy: 'Privacy & Cookie Notice | {title}',
       submitPreview: 'Submission Preview | {title}',
@@ -1257,7 +1280,7 @@ const messages = {
           form: 'Submission {current} of {total}'
         },
         formDetail: {
-          button: 'View form details',
+          button: 'View detail page',
           title: 'Form details',
           close: 'Close'
         },
@@ -1271,7 +1294,17 @@ const messages = {
           address: 'Address:',
           contact: 'Contact:'
         },
-        viewDetails: 'View details'
+        viewDetails: 'Open detail page'
+      },
+      record: {
+        backToMap: 'Back to Map List',
+        eyebrow: 'Submission Detail',
+        loading: 'Loading submission details...',
+        notFoundTitle: 'This submission could not be found',
+        notFoundBody: 'This submission may have been merged, removed, or is temporarily unavailable. You can return to the map list and keep browsing.',
+        loadFailedTitle: 'Failed to load this submission',
+        loadFailedBody: 'The submission detail page is temporarily unavailable. Please try again later.',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: 'Want to use the API?',

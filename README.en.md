@@ -406,6 +406,7 @@ By default, every page route passes through the i18n middleware, so the UI langu
 | `/` | Home page with links to the form, map, and library | Renders `views/index.ejs` |
 | `/form` | Anonymous form page that injects area options, frontend validation rules, and anti-abuse tokens | Sends sensitive-page headers and is excluded from indexing |
 | `/map` | Map overview page showing institution distribution, statistics, and the public data list | Supports `?inputType=` preset filtering |
+| `/map/record/:recordSlug` | Map submission detail page that renders a standalone submission view and supports previous / next navigation within the same institution | Entered from the `/map` "View detail page" action and renders `views/map_record.ejs` |
 | `/aboutus` | About page with project information and acknowledgements / friend links | Reads `friends.json` |
 | `/privacy` | Privacy and Cookie Notice page | Explains public-facing data handling boundaries |
 | `/blog` | Library index page with blog entries and tag filtering | Supports `?tag=<tagId>` |

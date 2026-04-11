@@ -406,6 +406,7 @@ A: 因为它会调用 `npx wrangler deploy`，并且与本仓库的 `package.jso
 | `/` | 站点首页，提供表单、地图、文库等入口 | 对应 `views/index.ejs` |
 | `/form` | 匿名表单页，下发地区选项、前端校验规则与防刷 token | 会附带敏感页面响应头，禁止索引 |
 | `/map` | 地图总览页，展示机构分布、统计与公开数据列表 | 支持 `?inputType=` 预设筛选 |
+| `/map/record/:recordSlug` | 地图提交详情页，独立展示单条提交内容并支持同机构记录上下翻页 | 从 `/map` 的“查看详情页”进入，对应 `views/map_record.ejs` |
 | `/aboutus` | 关于页，展示项目说明与友链/致谢信息 | 会读取 `friends.json` |
 | `/privacy` | 隐私政策与 Cookie 说明页 | 用于公开说明数据使用边界 |
 | `/blog` | 文库列表页，展示博客文章与标签筛选 | 支持 `?tag=<tagId>` |

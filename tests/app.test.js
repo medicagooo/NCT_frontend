@@ -526,10 +526,23 @@ test('map page renders the record container and lazy-load sentinel', async () =>
   assert.match(response.body, /sha256-20nQCchB9co0qIjJZRGuk2\/Z9VM\+kNiyxNV1lvTlZBo=/);
 });
 
+test('map record page renders the standalone submission detail shell', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const response = await requestPath(app, '/map/record/test-record-token?lang=en&search=test');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /id="mapRecordBackLink"/);
+  assert.match(response.body, /id="mapRecordTitle"/);
+  assert.match(response.body, /id="mapRecordDetailTableBody"/);
+  assert.match(response.body, /\/js\/map_record_page\.js/);
+  assert.match(response.body, /recordSlug:\s*"test-record-token"/);
+  assert.match(response.body, /Back to Map List/);
+});
+
 test('shared head pages render a single html and head root', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const articleId = encodeURIComponent('關於心種子教育違法辦學的控告');
-  const routes = ['/aboutus', '/blog', '/map', `/port/${articleId}`];
+  const routes = ['/aboutus', '/blog', '/map', '/map/record/test-record-token', `/port/${articleId}`];
 
   for (const route of routes) {
     const response = await requestPath(app, route);
@@ -1512,6 +1525,56 @@ test('map record detail helper omits empty fields in confirmation-style detail r
     'contactInformation',
     'scandal'
   ]);
+});
+
+test('map record detail helpers build stable route urls and locate grouped submissions', () => {
+  clearProjectModules();
+  const {
+    buildRecordDetailRouteUrl,
+    findGroupedRecordLocationByRouteToken,
+    getRecordDetailRouteToken
+  } = require(path.join(projectRoot, 'public/js/map_record_detail'));
+  const { groupSchoolRecords } = require(path.join(projectRoot, 'public/js/map_record_stats'));
+
+  const records = [
+    {
+      name: '启明学校',
+      province: '山东',
+      addr: '地址 A',
+      city: '青岛',
+      county: '市南区',
+      inputType: '受害者本人',
+      dateStart: '2024-01-01',
+      experience: '经历一'
+    },
+    {
+      name: '启明学校',
+      province: '山东',
+      addr: '地址 A',
+      city: '青岛',
+      county: '市南区',
+      inputType: '受害者的代理人',
+      dateStart: '2024-02-01',
+      experience: '经历二'
+    }
+  ];
+  const groups = groupSchoolRecords(records);
+  const firstToken = getRecordDetailRouteToken(records[0]);
+  const secondToken = getRecordDetailRouteToken(records[1]);
+  const detailUrl = buildRecordDetailRouteUrl(records[1], {
+    queryEntries: new URLSearchParams('lang=en&search=qiming'),
+    returnTo: 'record-3'
+  });
+  const location = findGroupedRecordLocationByRouteToken(groups, secondToken);
+
+  assert.notEqual(firstToken, secondToken);
+  assert.match(detailUrl, /^\/map\/record\//);
+  assert.match(detailUrl, /lang=en/);
+  assert.match(detailUrl, /search=qiming/);
+  assert.match(detailUrl, /returnTo=record-3/);
+  assert.equal(location.groupIndex, 0);
+  assert.equal(location.pageIndex, 1);
+  assert.equal(location.record.experience, '经历二');
 });
 
 test('map province utils normalize workers GeoJSON names and province aliases to stable codes', () => {

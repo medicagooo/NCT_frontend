@@ -174,7 +174,12 @@
             .filter((field) => field.value);
     }
 
-    function buildRecordPaginationHtml(i18n, currentPage, totalPages, { detailActionLabel = '' } = {}) {
+    function buildRecordPaginationHtml(i18n, currentPage, totalPages, {
+        detailActionLabel = '',
+        detailActionHref = '',
+        previousHref = '',
+        nextHref = ''
+    } = {}) {
         const normalizedTotalPages = Math.max(1, Number(totalPages) || 0);
         const normalizedCurrentPage = Math.min(
             Math.max(0, Number(currentPage) || 0),
@@ -185,19 +190,40 @@
             || readPath(i18n, ['map', 'list', 'pagination', 'page']);
         const previousLabel = readPath(i18n, ['map', 'list', 'pagination', 'previous'], 'Previous');
         const nextLabel = readPath(i18n, ['map', 'list', 'pagination', 'next'], 'Next');
+
+        function buildPaginationControlHtml(label, action, href, disabled) {
+            if (!disabled && String(href || '').trim()) {
+                return `
+                    <a
+                        href="${escapeHtml(href)}"
+                        class="map-record-pagination__button"
+                        data-page-action="${escapeHtml(action)}"
+                    >${escapeHtml(label)}</a>
+                `;
+            }
+
+            return `
+                <button
+                    type="button"
+                    class="map-record-pagination__button"
+                    data-page-action="${escapeHtml(action)}"
+                    ${disabled ? 'disabled' : ''}
+                >${escapeHtml(label)}</button>
+            `;
+        }
+
         const detailActionHtml = String(detailActionLabel || '').trim()
-            ? `<button type="button" class="map-record-pagination__detail-button" data-record-detail-action="true">${escapeHtml(detailActionLabel)}</button>`
+            ? (
+                String(detailActionHref || '').trim()
+                    ? `<a href="${escapeHtml(detailActionHref)}" class="map-record-pagination__detail-button" data-record-detail-link="true">${escapeHtml(detailActionLabel)}</a>`
+                    : `<button type="button" class="map-record-pagination__detail-button" data-record-detail-action="true">${escapeHtml(detailActionLabel)}</button>`
+            )
             : '';
 
         return `
             <div class="map-record-pagination">
                 <div class="map-record-pagination__side">
-                    <button
-                        type="button"
-                        class="map-record-pagination__button"
-                        data-page-action="prev"
-                        ${normalizedCurrentPage === 0 ? 'disabled' : ''}
-                    >${escapeHtml(previousLabel)}</button>
+                    ${buildPaginationControlHtml(previousLabel, 'prev', previousHref, normalizedCurrentPage === 0)}
                 </div>
                 <div class="map-record-pagination__center">
                     ${detailActionHtml}
@@ -207,12 +233,7 @@
                     }))}</span>
                 </div>
                 <div class="map-record-pagination__side map-record-pagination__side--end">
-                    <button
-                        type="button"
-                        class="map-record-pagination__button"
-                        data-page-action="next"
-                        ${normalizedCurrentPage >= normalizedTotalPages - 1 ? 'disabled' : ''}
-                    >${escapeHtml(nextLabel)}</button>
+                    ${buildPaginationControlHtml(nextLabel, 'next', nextHref, normalizedCurrentPage >= normalizedTotalPages - 1)}
                 </div>
             </div>
         `;
@@ -343,14 +364,97 @@
             .join('::');
     }
 
+    function hashRecordDetailKey(detailKey) {
+        let primaryHash = 5381;
+        let secondaryHash = 52711;
+        const normalizedDetailKey = String(detailKey || '');
+
+        for (const character of normalizedDetailKey) {
+            const codePoint = character.codePointAt(0) || 0;
+
+            primaryHash = ((primaryHash << 5) + primaryHash) ^ codePoint;
+            secondaryHash = ((secondaryHash << 5) + secondaryHash) ^ (codePoint * 97);
+        }
+
+        return `${(primaryHash >>> 0).toString(16).padStart(8, '0')}${(secondaryHash >>> 0).toString(16).padStart(8, '0')}`;
+    }
+
+    function getRecordDetailRouteToken(record) {
+        return hashRecordDetailKey(getRecordDetailPageKey(record));
+    }
+
+    function buildRecordDetailRouteUrl(record, {
+        basePath = '/map/record',
+        queryEntries,
+        returnTo = ''
+    } = {}) {
+        const normalizedBasePath = String(basePath || '/map/record').replace(/\/+$/, '') || '/map/record';
+        const searchParams = new URLSearchParams();
+        const normalizedReturnTo = String(returnTo || '').trim();
+        const routeToken = getRecordDetailRouteToken(record);
+
+        if (queryEntries && typeof queryEntries.forEach === 'function') {
+            queryEntries.forEach((value, key) => {
+                if (value != null && `${value}` !== '') {
+                    searchParams.set(key, value);
+                }
+            });
+        } else if (queryEntries && typeof queryEntries === 'object') {
+            Object.entries(queryEntries).forEach(([key, value]) => {
+                if (value != null && `${value}` !== '') {
+                    searchParams.set(key, value);
+                }
+            });
+        }
+
+        if (normalizedReturnTo) {
+            searchParams.set('returnTo', normalizedReturnTo);
+        }
+
+        const queryString = searchParams.toString();
+
+        return `${normalizedBasePath}/${encodeURIComponent(routeToken)}${queryString ? `?${queryString}` : ''}`;
+    }
+
+    function findGroupedRecordLocationByRouteToken(groups, routeToken) {
+        const normalizedRouteToken = String(routeToken || '').trim();
+
+        if (!normalizedRouteToken || !Array.isArray(groups)) {
+            return null;
+        }
+
+        for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
+            const group = groups[groupIndex];
+            const pages = Array.isArray(group && group.pages) ? group.pages : [];
+
+            for (let pageIndex = 0; pageIndex < pages.length; pageIndex += 1) {
+                const record = pages[pageIndex];
+
+                if (getRecordDetailRouteToken(record) === normalizedRouteToken) {
+                    return {
+                        group,
+                        groupIndex,
+                        pageIndex,
+                        record
+                    };
+                }
+            }
+        }
+
+        return null;
+    }
+
     return {
         getRecordConfirmationFields,
         buildRecordDetailHtml,
         buildRecordPaginationHtml,
+        buildRecordDetailRouteUrl,
         escapeHtml,
+        findGroupedRecordLocationByRouteToken,
         formatFieldLabel,
         formatMessage,
         getRecordDetailPageKey,
+        getRecordDetailRouteToken,
         getRecordRegionParts,
         getRecordRegionSummary
     };

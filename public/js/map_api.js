@@ -50,6 +50,7 @@ const PREFERRED_SOURCE_BACKGROUND_CHECK_INTERVAL_MS = 15000;
 const PREFERRED_SOURCE_FORCE_REFRESH_INTERVAL_MS = 120000;
 const { getElapsedSeconds, renderLastSyncedValue } = window.MapTimeUtils;
 const {
+    buildRecordDetailRouteUrl,
     buildRecordPaginationHtml,
     escapeHtml,
     formatMessage,
@@ -69,6 +70,7 @@ const {
 const themeMediaQuery = typeof window.matchMedia === 'function'
     ? window.matchMedia('(prefers-color-scheme: dark)')
     : null;
+const currentMapSearchParams = new URLSearchParams(window.location.search);
 
 let mapTileLayer = null;
 let provinceLayer = null;
@@ -562,28 +564,6 @@ function getPopupSummaryPages(records) {
     return uniquePages;
 }
 
-function navigateToRecordCard(targetIndex) {
-    const targetHash = `#${getRecordAnchorId(targetIndex)}`;
-    const targetCardId = getRecordAnchorId(targetIndex);
-
-    if (window.location.hash === targetHash) {
-        window.dispatchEvent(new Event('hashchange'));
-    } else {
-        window.location.hash = targetHash;
-    }
-
-    window.requestAnimationFrame(() => {
-        const targetCard = document.getElementById(targetCardId);
-
-        if (!targetCard) {
-            return;
-        }
-
-        targetCard.open = true;
-        targetCard.scrollIntoView({ block: 'start' });
-    });
-}
-
 function createGroupedMarkerPopup(group, targetGroupIndex) {
     const popupContent = document.createElement('div');
     const popupPages = getPopupSummaryPages(group && group.pages);
@@ -633,9 +613,25 @@ function createGroupedMarkerPopup(group, targetGroupIndex) {
         });
     }
 
+    function bindPopupNavigationLink(node) {
+        if (!node) {
+            return;
+        }
+
+        ['pointerdown', 'mousedown', 'touchstart'].forEach((eventName) => {
+            node.addEventListener(eventName, stopPopupInteractionPropagation);
+        });
+
+        node.addEventListener('click', stopPopupInteractionPropagation);
+    }
+
     function renderPopupPage() {
         const currentRecord = popupPages[currentPageIndex] || group.summaryRecord || {};
         const regionSummary = getRecordRegionSummary(currentRecord, getProvinceDisplay);
+        const detailHref = buildRecordDetailRouteUrl(currentRecord, {
+            queryEntries: currentMapSearchParams,
+            returnTo: getRecordAnchorId(targetGroupIndex)
+        });
         const paginationHtml = shouldShowPopupPagination
             ? buildRecordPaginationHtml(i18n, currentPageIndex, popupPageCount)
             : '';
@@ -650,7 +646,7 @@ function createGroupedMarkerPopup(group, targetGroupIndex) {
             </div>
             <div class="custom-popup__actions">
                 <a
-                    href="#${getRecordAnchorId(targetGroupIndex)}"
+                    href="${escapeHtml(detailHref)}"
                     class="custom-popup__detail-link"
                     data-popup-detail-link="true"
                 >${escapeHtml(i18n.map.list.viewDetails)}</a>
@@ -680,25 +676,7 @@ function createGroupedMarkerPopup(group, targetGroupIndex) {
             renderPopupPage();
         });
 
-        bindPopupControl(detailLink, () => {
-            if (!detailLink) {
-                return;
-            }
-
-            detailLink.blur();
-            navigateToRecordCard(targetGroupIndex);
-        });
-
-        if (detailLink) {
-            detailLink.addEventListener('keydown', (event) => {
-                if (event.key !== 'Enter' && event.key !== ' ') {
-                    return;
-                }
-
-                stopPopupInteraction(event);
-                navigateToRecordCard(targetGroupIndex);
-            });
-        }
+        bindPopupNavigationLink(detailLink);
     }
 
     renderPopupPage();

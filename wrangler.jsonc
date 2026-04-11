@@ -20,6 +20,8 @@
   "find_additional_modules": true,
   "base_dir": ".",
   "preserve_file_names": true,
+  // Keep SSR EJS templates in the Workers bundle, including
+  // the standalone /map/record/:recordSlug detail page and its partials.
   "rules": [
     {
       "type": "Text",
