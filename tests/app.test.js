@@ -1,8 +1,10 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const http = require('node:http');
+const os = require('node:os');
 const path = require('node:path');
 const test = require('node:test');
+const express = require('express');
 
 const projectRoot = path.resolve(__dirname, '..');
 
@@ -334,6 +336,10 @@ function responseBodyMatch(body, pattern) {
   return match;
 }
 
+function countMatches(body, pattern) {
+  return (String(body || '').match(pattern) || []).length;
+}
+
 function buildValidSubmissionBody(overrides = {}) {
   const basePayload = {
     identity: '受害者本人',
@@ -429,6 +435,61 @@ test('maintenance mode keeps static assets reachable for the maintenance page', 
   assert.match(response.headers['content-type'], /image\/svg\+xml/);
 });
 
+test('bundled static middleware serves large css files without truncation', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nct-static-'));
+  const cssDirectory = path.join(tempRoot, 'css');
+  const cssPayload = `/* middleware truncation regression */\n${'a'.repeat(70 * 1024)}`;
+
+  try {
+    fs.mkdirSync(cssDirectory, { recursive: true });
+    fs.writeFileSync(path.join(cssDirectory, 'main.css'), cssPayload, 'utf8');
+
+    clearProjectModules();
+    const { createBundledStaticMiddleware } = require(path.join(projectRoot, 'app/middleware/bundledStatic'));
+    const app = express();
+
+    app.use(createBundledStaticMiddleware({ rootDirectory: tempRoot }));
+    app.use((_req, res) => {
+      res.status(404).send('not found');
+    });
+
+    const response = await requestApp(app, { path: '/css/main.css' });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'], /text\/css/);
+    assert.equal(response.body.length, cssPayload.length);
+    assert.equal(response.body, cssPayload);
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+  }
+});
+
+test('bundled static middleware does not serve files outside its root', async () => {
+  const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'nct-static-'));
+  const outsideFilePath = path.join(tempRoot, '..', 'nct-static-outside.txt');
+
+  try {
+    fs.writeFileSync(outsideFilePath, 'outside bundle root', 'utf8');
+
+    clearProjectModules();
+    const { createBundledStaticMiddleware } = require(path.join(projectRoot, 'app/middleware/bundledStatic'));
+    const app = express();
+
+    app.use(createBundledStaticMiddleware({ rootDirectory: tempRoot }));
+    app.use((_req, res) => {
+      res.status(404).send('not found');
+    });
+
+    const response = await requestApp(app, { path: '/../nct-static-outside.txt' });
+
+    assert.equal(response.statusCode, 404);
+    assert.equal(response.body, 'not found');
+  } finally {
+    fs.rmSync(tempRoot, { recursive: true, force: true });
+    fs.rmSync(outsideFilePath, { force: true });
+  }
+});
+
 test('maintenance mode returns JSON errors for API requests', async () => {
   const app = loadApp({
     DEBUG_MOD: 'false',
@@ -456,12 +517,41 @@ test('map page renders the record container and lazy-load sentinel', async () =>
   assert.match(response.body, /id="data-container"/);
   assert.match(response.body, /id="data-container-sentinel"/);
   assert.match(response.body, /\/js\/map_record_stats\.js/);
+  assert.match(response.body, /\/js\/map_record_detail\.js/);
   assert.match(response.body, /\/js\/map_province_utils\.js/);
   assert.match(response.body, /\/js\/map_backTop\.js/);
   assert.match(response.body, /\/js\/queryUpd\.js/);
   assert.match(response.body, /cdn\.jsdelivr\.net\/npm\/chart\.js/);
   assert.match(response.body, /sha256-p4NxAoJBhIIN\+hmNHrzRCf9tD\/miZyoHS5obTRR9BMY=/);
   assert.match(response.body, /sha256-20nQCchB9co0qIjJZRGuk2\/Z9VM\+kNiyxNV1lvTlZBo=/);
+});
+
+test('map record page renders the standalone submission detail shell', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const response = await requestPath(app, '/map/record/test-record-token?lang=en&search=test');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /id="mapRecordBackLink"/);
+  assert.match(response.body, /id="mapRecordTitle"/);
+  assert.match(response.body, /id="mapRecordDetailTableBody"/);
+  assert.match(response.body, /\/js\/map_record_page\.js/);
+  assert.match(response.body, /recordSlug:\s*"test-record-token"/);
+  assert.match(response.body, /Back to Map List/);
+});
+
+test('shared head pages render a single html and head root', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const articleId = encodeURIComponent('關於心種子教育違法辦學的控告');
+  const routes = ['/aboutus', '/blog', '/map', '/map/record/test-record-token', `/port/${articleId}`];
+
+  for (const route of routes) {
+    const response = await requestPath(app, route);
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(countMatches(response.body, /<html\b/gi), 1, `${route} should render one <html>`);
+    assert.equal(countMatches(response.body, /<head\b/gi), 1, `${route} should render one <head>`);
+    assert.equal(countMatches(response.body, /<body\b/gi), 1, `${route} should render one <body>`);
+  }
 });
 
 test('map page ignores ASSET_VERSION=0 and falls back to a real cache-busting version', async () => {
@@ -750,6 +840,78 @@ test('debug page renders when debug mode is enabled', async () => {
 
   assert.equal(response.statusCode, 200);
   assert.match(response.body, /调试|Debug/);
+  assert.match(response.body, /href="\/debug\/submit-error"/);
+  assert.match(response.body, /站点配置|Site Configuration/);
+});
+
+test('debug page respects explicit language selection', async () => {
+  const app = loadApp({ DEBUG_MOD: 'true' });
+  const englishResponse = await requestPath(app, '/debug?lang=en');
+  const traditionalChineseResponse = await requestPath(app, '/debug?lang=zh-TW');
+
+  assert.equal(englishResponse.statusCode, 200);
+  assert.match(englishResponse.body, /<html lang="en">/);
+  assert.match(englishResponse.body, /Back to Home/);
+  assert.match(englishResponse.body, /Site Configuration/);
+  assert.match(englishResponse.body, /Open submission error preview/);
+  assert.match(String(englishResponse.headers['set-cookie']), /lang=en/);
+
+  assert.equal(traditionalChineseResponse.statusCode, 200);
+  assert.match(traditionalChineseResponse.body, /<html lang="zh-TW">/);
+  assert.match(traditionalChineseResponse.body, /返回首頁/);
+  assert.match(traditionalChineseResponse.body, /站點配置/);
+  assert.match(traditionalChineseResponse.body, /查看提交失敗頁預覽/);
+  assert.match(String(traditionalChineseResponse.headers['set-cookie']), /lang=zh-TW/);
+});
+
+test('debug page redacts sensitive Google integration URLs', async () => {
+  const app = loadApp({
+    DEBUG_MOD: 'true',
+    FORM_ID: '1FAIpQLSabcdefghijklmnopqrstuvwxyz123456',
+    GOOGLE_SCRIPT_URL: 'https://script.google.com/macros/s/abcdefghijklmnopqrstuvwxyz1234567890/exec?foo=bar'
+  });
+  const response = await requestPath(app, '/debug');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /docs\.google\.com\/forms\/d\/e\/1FAI\.\.\.3456\/formResponse/);
+  assert.match(response.body, /script\.google\.com\/macros\/s\/abcd\.\.\.7890\/exec/);
+});
+
+test('standalone submit error preview is hidden when debug mode is disabled', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const response = await requestPath(app, '/debug/submit-error');
+
+  assert.equal(response.statusCode, 404);
+});
+
+test('standalone submit error preview renders a prefilled Google Form link when debug mode is enabled', async () => {
+  const app = loadApp({ DEBUG_MOD: 'true' });
+  const response = await requestPath(app, '/debug/submit-error');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /viewform\?usp=pp_url&amp;entry\.842223433=11/);
+  assert.match(response.body, /entry\.1422578992=%E7%94%B7/);
+  assert.match(response.body, /打开 Google Form 页面可能需要网络代理|opening the Google Form page may require a network proxy/);
+});
+
+test('standalone submit error preview respects explicit language selection', async () => {
+  const app = loadApp({ DEBUG_MOD: 'true' });
+  const englishResponse = await requestPath(app, '/debug/submit-error?lang=en');
+  const traditionalChineseResponse = await requestPath(app, '/debug/submit-error?lang=zh-TW');
+
+  assert.equal(englishResponse.statusCode, 200);
+  assert.match(englishResponse.body, /<html lang="en">/);
+  assert.match(englishResponse.body, /Submission Failed/);
+  assert.match(englishResponse.body, /Open Google Form to Continue/);
+  assert.match(englishResponse.body, /opening the Google Form page may require a network proxy/);
+  assert.match(String(englishResponse.headers['set-cookie']), /lang=en/);
+
+  assert.equal(traditionalChineseResponse.statusCode, 200);
+  assert.match(traditionalChineseResponse.body, /<html lang="zh-TW">/);
+  assert.match(traditionalChineseResponse.body, /提交失敗/);
+  assert.match(traditionalChineseResponse.body, /打開 Google Form 繼續提交/);
+  assert.match(traditionalChineseResponse.body, /打開 Google Form 頁面可能需要網路代理/);
+  assert.match(String(traditionalChineseResponse.headers['set-cookie']), /lang=zh-TW/);
 });
 
 test('about page renders localized friend descriptions in english mode', async () => {
@@ -1122,6 +1284,15 @@ test('blog article shows bilingual content when english language is selected', a
   }
 });
 
+test('blog article page no longer hardcodes a 70 percent card width', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const articleId = encodeURIComponent('關於心種子教育違法辦學的控告');
+  const response = await requestPath(app, `/port/${articleId}`);
+
+  assert.equal(response.statusCode, 200);
+  assert.doesNotMatch(response.body, /style="width:\s*70%;?"/);
+});
+
 test('map data service preserves valid upstream sync timestamps', () => {
   clearProjectModules();
   const { resolveLastSyncedTimestamp } = require(path.join(projectRoot, 'app/services/mapDataService'));
@@ -1138,6 +1309,41 @@ test('map data service normalizes simplified and traditional province names to o
   assert.equal(normalizeProvinceNameToLegacy('重庆'), '重慶');
   assert.equal(normalizeProvinceNameToLegacy('重慶'), '重慶');
   assert.equal(normalizeProvinceNameToLegacy('广东'), '廣東');
+});
+
+test('map data service preserves public detail fields needed by map record pagination', () => {
+  clearProjectModules();
+  const { buildNormalizedMapResponse } = require(path.join(projectRoot, 'app/services/mapDataService'));
+
+  const payload = buildNormalizedMapResponse({
+    avg_age: 18,
+    last_synced: 1774925078387,
+    schoolNum: 1,
+    formNum: 2,
+    statistics: [],
+    statisticsForm: [],
+    data: [
+      {
+        學校名稱: '启明学校',
+        省份: '北京市',
+        緯度: 39.9,
+        經度: 116.4,
+        '机构所在城市 / 区县': '北京市',
+        '机构所在县区': '东城区',
+        '首次被送入日期': '2024-01-02',
+        離開日期: '2024-02-03',
+        '请问您是作为什么身份来填写本表单？': '受害者本人',
+        机构联系方式: 'test@example.com'
+      }
+    ]
+  }, Date.now(), 'google-script');
+
+  assert.equal(payload.data[0].city, '北京市');
+  assert.equal(payload.data[0].county, '东城区');
+  assert.equal(payload.data[0].dateStart, '2024-01-02');
+  assert.equal(payload.data[0].dateEnd, '2024-02-03');
+  assert.equal(payload.data[0].inputType, '受害者本人');
+  assert.equal(payload.data[0].contact, 'test@example.com');
 });
 
 test('runtime config resolves bundle paths in workers mode', () => {
@@ -1271,13 +1477,104 @@ test('map record stats count self and agent reports per school', () => {
   );
 
   const groupedRecords = groupSchoolRecords([
-    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1' },
-    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1' },
-    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 2', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1' }
+    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1', inputType: '受害者本人', dateStart: '2024-01-01' },
+    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1', inputType: '受害者本人', dateStart: '2024-01-01' },
+    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1', inputType: '受害者的代理人', dateStart: '2024-01-01' },
+    { name: '启明学校', province: '山东', addr: '地址 A', experience: '经历 1', scandal: '', else: '', HMaster: '甲', prov: '青岛', contact: '1', inputType: '受害者本人', dateStart: '2024-02-01' }
   ]);
 
   assert.equal(groupedRecords.length, 1);
-  assert.equal(groupedRecords[0].pages.length, 2);
+  assert.equal(groupedRecords[0].pages.length, 4);
+});
+
+test('map record detail helper omits empty fields in confirmation-style detail rows', () => {
+  clearProjectModules();
+  const { getRecordConfirmationFields } = require(path.join(projectRoot, 'public/js/map_record_detail'));
+  const { getMessages } = require(path.join(projectRoot, 'config/i18n'));
+
+  const fields = getRecordConfirmationFields({
+    inputType: '受害者本人',
+    name: '启明学校',
+    province: '山东',
+    city: '青岛市',
+    county: '',
+    dateStart: '2024-01-01',
+    dateEnd: '',
+    addr: '',
+    contact: 'test@example.com',
+    HMaster: '',
+    experience: '',
+    scandal: '存在体罚',
+    else: ''
+  }, {
+    i18n: getMessages('zh-CN'),
+    getProvinceDisplay(value) {
+      return value;
+    },
+    getInputTypeDisplay(value) {
+      return value;
+    }
+  });
+
+  assert.deepEqual(fields.map((field) => field.key), [
+    'identity',
+    'dateStart',
+    'schoolName',
+    'province',
+    'city',
+    'contactInformation',
+    'scandal'
+  ]);
+});
+
+test('map record detail helpers build stable route urls and locate grouped submissions', () => {
+  clearProjectModules();
+  const {
+    buildRecordDetailRouteUrl,
+    findGroupedRecordLocationByRouteToken,
+    getRecordDetailRouteToken
+  } = require(path.join(projectRoot, 'public/js/map_record_detail'));
+  const { groupSchoolRecords } = require(path.join(projectRoot, 'public/js/map_record_stats'));
+
+  const records = [
+    {
+      name: '启明学校',
+      province: '山东',
+      addr: '地址 A',
+      city: '青岛',
+      county: '市南区',
+      inputType: '受害者本人',
+      dateStart: '2024-01-01',
+      experience: '经历一'
+    },
+    {
+      name: '启明学校',
+      province: '山东',
+      addr: '地址 A',
+      city: '青岛',
+      county: '市南区',
+      inputType: '受害者的代理人',
+      dateStart: '2024-02-01',
+      experience: '经历二'
+    }
+  ];
+  const groups = groupSchoolRecords(records);
+  const firstToken = getRecordDetailRouteToken(records[0]);
+  const secondToken = getRecordDetailRouteToken(records[1]);
+  const detailUrl = buildRecordDetailRouteUrl(records[1], {
+    queryEntries: new URLSearchParams('lang=en&search=qiming'),
+    returnTo: 'record-3'
+  });
+  const location = findGroupedRecordLocationByRouteToken(groups, secondToken);
+
+  assert.notEqual(firstToken, secondToken);
+  assert.match(detailUrl, /^\/map\/record\//);
+  assert.match(detailUrl, /lang=en/);
+  assert.match(detailUrl, /search=qiming/);
+  assert.match(detailUrl, /returnTo=record-3/);
+  assert.equal(location.groupIndex, 0);
+  assert.equal(location.pageIndex, 1);
+  assert.equal(location.record.experience, '经历二');
 });
 
 test('map province utils normalize workers GeoJSON names and province aliases to stable codes', () => {
@@ -1702,6 +1999,66 @@ test('submit confirm route sends the reviewed payload to Google Form in normal m
     assert.match(capturedCalls[0][1], /entry\.5034928=/);
     assert.match(decodeURIComponent(capturedCalls[0][1]), /测试机构/);
     assert.match(confirmResponse.body, /提交成功/);
+    restore();
+  } finally {
+    clearProjectModules();
+  }
+});
+
+test('submit confirm route renders a prefilled Google Form fallback link when upstream submission fails', { concurrency: false }, async () => {
+  clearProjectModules();
+
+  try {
+    const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+    const { app, restore } = loadAppWithPatchedFormService({
+      DEBUG_MOD: 'false',
+      FORM_DRY_RUN: 'false',
+      FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+      FORM_PROTECTION_MIN_FILL_MS: '3000'
+    }, (formService) => {
+      const originalSubmitToGoogleForm = formService.submitToGoogleForm;
+      formService.submitToGoogleForm = async () => {
+        throw new Error('google form unavailable');
+      };
+
+      return () => {
+        formService.submitToGoogleForm = originalSubmitToGoogleForm;
+      };
+    });
+    const reviewResponse = await requestApp(app, {
+      path: '/submit',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: buildValidSubmissionBody({
+        form_token: issueFormProtectionToken({
+          secret: 'test-form-protection-secret',
+          issuedAt: Date.now() - 5000
+        })
+      })
+    });
+
+    const confirmationTokenMatch = responseBodyMatch(reviewResponse.body, /name="confirmation_token" value="([^"]+)"/);
+    const confirmationPayloadMatch = responseBodyMatch(reviewResponse.body, /<textarea name="confirmation_payload" hidden>([^<]*)<\/textarea>/);
+    const confirmResponse = await requestApp(app, {
+      path: '/submit/confirm',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        confirmation_token: confirmationTokenMatch[1],
+        confirmation_payload: confirmationPayloadMatch[1]
+      }).toString()
+    });
+
+    assert.equal(confirmResponse.statusCode, 500);
+    assert.match(confirmResponse.body, /打开 Google Form 继续提交|Open Google Form to Continue/);
+    assert.match(confirmResponse.body, /打开 Google Form 页面可能需要网络代理|opening the Google Form page may require a network proxy/);
+    assert.match(confirmResponse.body, /viewform\?usp=pp_url&amp;entry\.842223433=/);
+    assert.match(confirmResponse.body, /entry\.5034928=%E6%B5%8B%E8%AF%95%E6%9C%BA%E6%9E%84/);
+    assert.match(confirmResponse.body, /entry\.500021634=%E5%8F%97%E5%AE%B3%E8%80%85%E6%9C%AC%E4%BA%BA/);
     restore();
   } finally {
     clearProjectModules();

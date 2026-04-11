@@ -38,10 +38,12 @@ const messages = {
       home: '首页|{title}',
       form: '填写表单|{title}',
       map: '地图|{title}',
+      mapRecord: '提交详情|{title}',
       about: '关于我们|{title}',
       privacy: '隐私政策与 Cookie 说明|{title}',
       submitPreview: '提交预览|{title}',
       submitConfirm: '提交确认|{title}',
+      submitError: '提交失败|{title}',
       blog: '文库|{title}',
       article: '{articleTitle}|{title}',
       debug: '调试|{title}',
@@ -226,7 +228,13 @@ const messages = {
         pagination: {
           previous: '上一页',
           next: '下一页',
-          page: '第 {current} / {total} 页'
+          page: '第 {current} / {total} 页',
+          form: '第 {current} / {total} 份表单'
+        },
+        formDetail: {
+          button: '查看详情页',
+          title: '表单详细信息',
+          close: '关闭'
         },
         fields: {
           scandal: '学校丑闻：',
@@ -238,7 +246,17 @@ const messages = {
           address: '地址：',
           contact: '联系方式：'
         },
-        viewDetails: '查看详细信息'
+        viewDetails: '查看详情页'
+      },
+      record: {
+        backToMap: '返回地图列表',
+        eyebrow: '提交详情',
+        loading: '正在加载提交详情...',
+        notFoundTitle: '未找到这份提交',
+        notFoundBody: '这份提交可能已被合并、删除或暂时不可用。你可以返回地图列表继续查看。',
+        loadFailedTitle: '提交详情加载失败',
+        loadFailedBody: '暂时无法加载这份提交，请稍后重试。',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: '想要调用 API？',
@@ -379,6 +397,15 @@ const messages = {
       confirming: '提交中...',
       backForm: '返回表单'
     },
+    submitError: {
+      title: '提交失败',
+      intro: '站内提交没有成功。你可以打开下面这个已预填内容的 Google Form 链接继续提交。',
+      privacyNote: '注意：下面这个链接包含你刚刚填写的表单内容，请不要随意分享。',
+      proxyNote: '提示：如果你当前网络无法直接访问 Google 服务，打开 Google Form 页面可能需要网络代理。',
+      openFallback: '打开 Google Form 继续提交',
+      urlLabel: '带预填内容的 Google Form 链接',
+      backForm: '返回表单'
+    },
     maintenance: {
       badge: '站点维护中',
       title: '网站正在维护中',
@@ -453,10 +480,59 @@ const messages = {
     debug: {
       title: '调试',
       intro: '此页面仅在 DEBUG_MOD=true 时可用。',
+      sections: {
+        request: '请求与运行时',
+        site: '站点配置',
+        integrations: '集成状态',
+        limits: '限流与表单参数',
+        tools: '调试工具'
+      },
       labels: {
         language: '语言',
+        requestPath: '当前路径',
+        runtime: '运行时',
+        assetVersion: '资源版本',
+        siteTitle: '站点标题',
+        siteUrl: '站点地址',
         apiUrl: 'API 地址',
-        debugMode: '调试模式'
+        debugMode: '调试模式',
+        formDryRun: '表单干跑',
+        maintenanceMode: '维护模式',
+        maintenanceRetryAfter: '维护重试时间',
+        trustProxy: 'Trust Proxy',
+        mapNodeTransport: 'Node 地图传输覆写',
+        googleForm: 'Google Form 提交地址',
+        googleScript: '私有地图上游',
+        publicMapDataUrl: '公开地图回退源',
+        translationProvider: '翻译服务',
+        redisRateLimit: 'Redis 限流存储',
+        formProtectionSecret: '表单保护 Secret',
+        pageReadLimit: '页面读取限流',
+        mapReadLimit: '地图读取限流',
+        submitRateLimit: '提交限流',
+        mapUpstreamTimeout: '地图上游超时',
+        translationTimeout: '翻译服务超时',
+        minFillMs: '最短填写时长',
+        maxAgeMs: '表单 Token 有效期'
+      },
+      values: {
+        enabled: '已启用',
+        disabled: '未启用',
+        configured: '已配置',
+        missing: '未配置',
+        unknown: '未知',
+        explicit: '显式配置',
+        derived: '派生值',
+        memoryOnly: '仅内存模式',
+        publicFallbackOnly: '仅公开回退',
+        node: 'Node.js',
+        workers: 'Cloudflare Workers',
+        limitWindow: '每 {minutes} 分钟 {count} 次',
+        milliseconds: '{count} ms',
+        seconds: '{count} s'
+      },
+      links: {
+        submitErrorPreview: '查看提交失败页预览'
       }
     },
     data: {
@@ -486,10 +562,12 @@ const messages = {
       home: '主頁|{title}',
       form: '填寫表單|{title}',
       map: '地圖|{title}',
+      mapRecord: '提交詳情|{title}',
       about: '關於我們|{title}',
       privacy: '隱私政策與 Cookie 說明|{title}',
       submitPreview: '提交預覽|{title}',
       submitConfirm: '提交確認|{title}',
+      submitError: '提交失敗|{title}',
       blog: '文庫|{title}',
       article: '{articleTitle}|{title}',
       debug: '調試|{title}',
@@ -674,7 +752,13 @@ const messages = {
         pagination: {
           previous: '上一頁',
           next: '下一頁',
-          page: '第 {current} / {total} 頁'
+          page: '第 {current} / {total} 頁',
+          form: '第 {current} / {total} 份表單'
+        },
+        formDetail: {
+          button: '查看詳情頁',
+          title: '表單詳細資訊',
+          close: '關閉'
         },
         fields: {
           scandal: '學校醜聞：',
@@ -686,7 +770,17 @@ const messages = {
           address: '地址：',
           contact: '聯繫方式：'
         },
-        viewDetails: '查看詳細信息'
+        viewDetails: '查看詳情頁'
+      },
+      record: {
+        backToMap: '返回地圖列表',
+        eyebrow: '提交詳情',
+        loading: '正在載入提交詳情...',
+        notFoundTitle: '找不到這份提交',
+        notFoundBody: '這份提交可能已被合併、刪除，或暫時無法公開。你可以返回地圖列表繼續查看。',
+        loadFailedTitle: '提交詳情載入失敗',
+        loadFailedBody: '暫時無法載入這份提交，請稍後再試。',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: '想要調用 API？',
@@ -827,6 +921,15 @@ const messages = {
       confirming: '提交中...',
       backForm: '返回表單'
     },
+    submitError: {
+      title: '提交失敗',
+      intro: '站內提交沒有成功。你可以打開下面這個已預填內容的 Google Form 連結繼續提交。',
+      privacyNote: '注意：下面這個連結包含你剛剛填寫的表單內容，請不要隨意分享。',
+      proxyNote: '提示：如果你目前的網路無法直接存取 Google 服務，打開 Google Form 頁面可能需要網路代理。',
+      openFallback: '打開 Google Form 繼續提交',
+      urlLabel: '帶預填內容的 Google Form 連結',
+      backForm: '返回表單'
+    },
     maintenance: {
       badge: '站點維護中',
       title: '網站正在維護中',
@@ -901,10 +1004,59 @@ const messages = {
     debug: {
       title: '調試',
       intro: '此頁面僅在 DEBUG_MOD=true 時可用。',
+      sections: {
+        request: '請求與運行時',
+        site: '站點配置',
+        integrations: '整合狀態',
+        limits: '限流與表單參數',
+        tools: '調試工具'
+      },
       labels: {
         language: '語言',
+        requestPath: '目前路徑',
+        runtime: '運行時',
+        assetVersion: '資源版本',
+        siteTitle: '站點標題',
+        siteUrl: '站點位址',
         apiUrl: 'API 位址',
-        debugMode: '調試模式'
+        debugMode: '調試模式',
+        formDryRun: '表單 Dry Run',
+        maintenanceMode: '維護模式',
+        maintenanceRetryAfter: '維護重試時間',
+        trustProxy: 'Trust Proxy',
+        mapNodeTransport: 'Node 地圖傳輸覆寫',
+        googleForm: 'Google Form 提交位址',
+        googleScript: '私有地圖上游',
+        publicMapDataUrl: '公開地圖回退源',
+        translationProvider: '翻譯服務',
+        redisRateLimit: 'Redis 限流儲存',
+        formProtectionSecret: '表單保護 Secret',
+        pageReadLimit: '頁面讀取限流',
+        mapReadLimit: '地圖讀取限流',
+        submitRateLimit: '提交限流',
+        mapUpstreamTimeout: '地圖上游逾時',
+        translationTimeout: '翻譯服務逾時',
+        minFillMs: '最短填寫時長',
+        maxAgeMs: '表單 Token 有效期'
+      },
+      values: {
+        enabled: '已啟用',
+        disabled: '未啟用',
+        configured: '已配置',
+        missing: '未配置',
+        unknown: '未知',
+        explicit: '顯式配置',
+        derived: '派生值',
+        memoryOnly: '僅記憶體模式',
+        publicFallbackOnly: '僅公開回退',
+        node: 'Node.js',
+        workers: 'Cloudflare Workers',
+        limitWindow: '每 {minutes} 分鐘 {count} 次',
+        milliseconds: '{count} ms',
+        seconds: '{count} s'
+      },
+      links: {
+        submitErrorPreview: '查看提交失敗頁預覽'
       }
     },
     data: {
@@ -934,10 +1086,12 @@ const messages = {
       home: 'Home | {title}',
       form: 'Form | {title}',
       map: 'Map | {title}',
+      mapRecord: 'Submission Detail | {title}',
       about: 'About | {title}',
       privacy: 'Privacy & Cookie Notice | {title}',
       submitPreview: 'Submission Preview | {title}',
       submitConfirm: 'Submission Confirmation | {title}',
+      submitError: 'Submission Failed | {title}',
       blog: 'Library | {title}',
       article: '{articleTitle} | {title}',
       debug: 'Debug | {title}',
@@ -1122,7 +1276,13 @@ const messages = {
         pagination: {
           previous: 'Previous',
           next: 'Next',
-          page: 'Page {current} of {total}'
+          page: 'Page {current} of {total}',
+          form: 'Submission {current} of {total}'
+        },
+        formDetail: {
+          button: 'View detail page',
+          title: 'Form details',
+          close: 'Close'
         },
         fields: {
           scandal: 'School scandals:',
@@ -1134,7 +1294,17 @@ const messages = {
           address: 'Address:',
           contact: 'Contact:'
         },
-        viewDetails: 'View details'
+        viewDetails: 'Open detail page'
+      },
+      record: {
+        backToMap: 'Back to Map List',
+        eyebrow: 'Submission Detail',
+        loading: 'Loading submission details...',
+        notFoundTitle: 'This submission could not be found',
+        notFoundBody: 'This submission may have been merged, removed, or is temporarily unavailable. You can return to the map list and keep browsing.',
+        loadFailedTitle: 'Failed to load this submission',
+        loadFailedBody: 'The submission detail page is temporarily unavailable. Please try again later.',
+        documentTitle: '{school} | {site}'
       },
       api: {
         summary: 'Want to use the API?',
@@ -1275,6 +1445,15 @@ const messages = {
       confirming: 'Submitting...',
       backForm: 'Back to Form'
     },
+    submitError: {
+      title: 'Submission Failed',
+      intro: 'The in-site submission did not complete successfully. You can continue by opening the Google Form link below with your data prefilled.',
+      privacyNote: 'Note: the link below contains the form content you just entered, so please do not share it casually.',
+      proxyNote: 'Note: if your current network cannot access Google services directly, opening the Google Form page may require a network proxy.',
+      openFallback: 'Open Google Form to Continue',
+      urlLabel: 'Prefilled Google Form Link',
+      backForm: 'Back to Form'
+    },
     maintenance: {
       badge: 'Site Maintenance',
       title: 'We are performing a short maintenance',
@@ -1349,10 +1528,59 @@ const messages = {
     debug: {
       title: 'Debug',
       intro: 'This page is only available when DEBUG_MOD=true.',
+      sections: {
+        request: 'Request & Runtime',
+        site: 'Site Configuration',
+        integrations: 'Integration Status',
+        limits: 'Limits & Form Settings',
+        tools: 'Debug Tools'
+      },
       labels: {
         language: 'Language',
+        requestPath: 'Request Path',
+        runtime: 'Runtime',
+        assetVersion: 'Asset Version',
+        siteTitle: 'Site Title',
+        siteUrl: 'Site URL',
         apiUrl: 'API URL',
-        debugMode: 'Debug Mode'
+        debugMode: 'Debug Mode',
+        formDryRun: 'Form Dry Run',
+        maintenanceMode: 'Maintenance Mode',
+        maintenanceRetryAfter: 'Maintenance Retry-After',
+        trustProxy: 'Trust Proxy',
+        mapNodeTransport: 'Node Map Transport Override',
+        googleForm: 'Google Form Submit URL',
+        googleScript: 'Private Map Upstream',
+        publicMapDataUrl: 'Public Map Fallback URL',
+        translationProvider: 'Translation Provider',
+        redisRateLimit: 'Redis Rate Limit Store',
+        formProtectionSecret: 'Form Protection Secret',
+        pageReadLimit: 'Page Read Limit',
+        mapReadLimit: 'Map Read Limit',
+        submitRateLimit: 'Submit Rate Limit',
+        mapUpstreamTimeout: 'Map Upstream Timeout',
+        translationTimeout: 'Translation Provider Timeout',
+        minFillMs: 'Minimum Fill Time',
+        maxAgeMs: 'Form Token Max Age'
+      },
+      values: {
+        enabled: 'Enabled',
+        disabled: 'Disabled',
+        configured: 'Configured',
+        missing: 'Missing',
+        unknown: 'Unknown',
+        explicit: 'Explicit',
+        derived: 'Derived',
+        memoryOnly: 'Memory Only',
+        publicFallbackOnly: 'Public Fallback Only',
+        node: 'Node.js',
+        workers: 'Cloudflare Workers',
+        limitWindow: '{count} per {minutes} min',
+        milliseconds: '{count} ms',
+        seconds: '{count} s'
+      },
+      links: {
+        submitErrorPreview: 'Open submission error preview'
       }
     },
     data: {

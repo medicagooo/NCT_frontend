@@ -10,8 +10,10 @@ const {
   formProtectionMaxAgeMs,
   formProtectionMinFillMs,
   formProtectionSecret,
+  formProtectionSecretConfigured,
   googleFormUrl,
   googleScriptUrl,
+  isWorkersRuntime,
   maintenanceMode,
   maintenanceNotice,
   maintenanceRetryAfterSeconds,
@@ -24,10 +26,13 @@ const {
   siteUrl,
   submitRateLimitMax,
   title,
+  translationProviderConfigured,
+  translationProviderTimeoutMs,
   trustProxy
 } = require('../config/appConfig');
 const { paths } = require('../config/fileConfig');
 const { helmetConfig, requestBodyLimits } = require('../config/security');
+const { createBundledStaticMiddleware } = require('./middleware/bundledStatic');
 const { createI18nMiddleware } = require('./middleware/i18n');
 const { createMaintenanceMiddleware } = require('./middleware/maintenance');
 const createApiRoutes = require('./routes/apiRoutes');
@@ -87,7 +92,13 @@ app.get('/cn.json', (_req, res) => {
     .set('Cache-Control', 'public, max-age=0')
     .send(chinaGeoJsonPayload);
 });
-app.use(express.static(paths.public));
+if (isWorkersRuntime) {
+  // Workers 运行时改为直接从 bundle 读取静态文件，
+  // 避免 express.static 在大资源上出现 64 KiB 截断。
+  app.use(createBundledStaticMiddleware({ rootDirectory: paths.public }));
+} else {
+  app.use(express.static(paths.public));
+}
 app.use(createMaintenanceMiddleware({
   maintenanceMode,
   maintenanceNotice,
@@ -110,10 +121,27 @@ app.use(express.json({ limit: requestBodyLimits.json }));
 app.use(createPageRoutes({
   apiUrl,
   debugMod,
+  formDryRun,
+  formProtectionMaxAgeMs,
+  formProtectionMinFillMs,
   formProtectionSecret,
+  formProtectionSecretConfigured,
+  googleFormUrl,
+  googleScriptUrl,
+  isWorkersRuntime,
+  maintenanceMode,
+  maintenanceRetryAfterSeconds,
+  mapDataNodeTransportOverrides,
+  mapDataUpstreamTimeoutMs,
+  mapReadRateLimitMax,
   pageReadRateLimitMax,
+  publicMapDataUrl,
   rateLimitRedisUrl,
   siteUrl,
+  submitRateLimitMax,
+  translationProviderConfigured,
+  translationProviderTimeoutMs,
+  trustProxy,
   title
 }));
 app.use(createFormRoutes({
