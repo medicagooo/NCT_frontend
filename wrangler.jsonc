@@ -17,7 +17,7 @@
     // .dev.vars instead of being checked in here.
     "RUNTIME_TARGET": "workers"
   },
-  // To enable the institution correction form with D1 on Workers, uncomment and fill:
+  // To enable D1-backed submissions on Workers (/form and institution correction), uncomment and fill:
   // "d1_databases": [
   //   {
   //     "binding": "DB",

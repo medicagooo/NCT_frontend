@@ -82,7 +82,7 @@ N·C·T is a site for documenting, organizing, and publicly presenting informati
 | Template engine | EJS |
 | Frontend | Vanilla JavaScript + Leaflet + Chart.js |
 | Runtime targets | Node.js / Cloudflare Workers |
-| Submission sink | Google Form |
+| Submission sink | Google Form / D1 (configurable) |
 | Map data source | Private Google Apps Script source with public API fallback |
 | Translation provider | Google Cloud Translation API, optional |
 | Config security | Built-in `secure-config` encryption helper |
@@ -109,10 +109,12 @@ flowchart TD
   P --> C1[Content and site data<br/>blog/*.md / data.json / friends.json]
   P --> S1[Site outputs<br/>robots.txt / sitemap.xml]
 
-  F --> FS[formService<br/>validation + Google Form field mapping]
+  F --> FS[formService<br/>validation + submission field normalization]
   F --> FP[formProtectionService<br/>honeypot + fill-time token]
   F --> FC[formConfirmationService<br/>confirmation signing]
+  F --> FD1[formSubmissionStorageService<br/>D1 persistence]
   F --> GF[(Google Form)]
+  F --> D1[(D1)]
 
   I --> MD[mapDataService<br/>cache + private-source priority + public fallback]
   I --> TS[textTranslationService<br/>translation cache + cooldown logic]
@@ -182,7 +184,7 @@ npm run dev:workers
 
 Recommendations:
 
-- Keep `FORM_DRY_RUN="true"` during local development to avoid accidental writes to a production Google Form.
+- Keep `FORM_DRY_RUN="true"` during local development to avoid accidental writes to live production targets.
 - Use `.env` for Node mode and `.dev.vars` for Workers mode. Do not mix them.
 - For full inline configuration notes, read [`.env.example`](./.env.example) and [`.dev.vars.example`](./.dev.vars.example).
 
@@ -228,7 +230,7 @@ This README only lists the most important variables. For the full set, see [`.en
 | Variable | Purpose |
 | --- | --- |
 | `SITE_URL` | Canonical site URL for sitemap, robots, and canonical outputs |
-| `FORM_DRY_RUN` | When `true`, submissions are previewed but not sent to Google Form |
+| `FORM_DRY_RUN` | When `true`, submissions are previewed but not sent to the configured live target |
 | `FORM_SUBMIT_TARGET` | `/form` submission target: `google`, `d1`, or `both`; defaults to `google` |
 | `FORM_PROTECTION_SECRET` | Core secret for form protection and encrypted config decryption |
 | `FORM_ID` / `FORM_ID_ENCRYPTED` | Google Form ID, choose one |
@@ -275,7 +277,7 @@ For local Workers development, you can also read from `.dev.vars`:
 npm run secure-config -- bootstrap-env --env-file ".dev.vars"
 ```
 
-> Note: if your local runtime is in mainland China, real submissions to Google Form may be affected by network conditions. During development, it is safer to keep `FORM_DRY_RUN="true"` first.
+> Note: if your configured target includes Google Form and your local runtime is in mainland China, live submissions may be affected by network conditions. During development, it is safer to keep `FORM_DRY_RUN="true"` first.
 
 If you prefer a step-by-step flow, generate a secret first and then encrypt each value:
 
@@ -292,13 +294,13 @@ Important boundaries:
 
 - This reduces the risk of plain-text exposure in the repository, logs, generic config panels, or debug pages.
 - It does not replace backend trust boundaries. If an attacker can read all server-side secrets, encrypted values and their decryption secret may still be exposed together.
-- The most reliable way to prevent bypassing site-side validation is still to avoid exposing a final write endpoint as a publicly writable anonymous Google Form.
+- The most reliable way to prevent bypassing site-side validation is still to avoid exposing the final write path as a publicly writable anonymous Google Form or any other anonymous public write endpoint.
 
 ## Form Privacy Notice
 
 The current public notice used on the form page and `/privacy` is:
 
-> Privacy notice: personal basic information such as birth year and sex entered in this questionnaire will be kept strictly confidential. Experience descriptions and exposed institution information may be shown on public pages of this site. Submitted content is stored and organized through Google Form / Google Sheets. Please do not enter highly sensitive personal data such as ID numbers, private phone numbers, or home addresses in fields that may become public.
+> Privacy notice: personal basic information such as birth year and sex entered in this questionnaire will be kept strictly confidential. Experience descriptions and exposed institution information may be shown on public pages of this site. Submitted content may be written to Google Form, the D1 database, or both depending on the site configuration. Please do not enter highly sensitive personal data such as ID numbers, private phone numbers, or home addresses in fields that may become public.
 
 If you later change which fields are public, update all of the following together:
 
@@ -365,14 +367,85 @@ Deployment recommendations:
 | `D1_BINDING_NAME` | Text | Only set this when the D1 binding name is not `DB` / `NCT_DB` |
 | `RATE_LIMIT_REDIS_URL` | Secret | Recommended for multi-instance deployments |
 
-### 5. Bind the production domain
+### 5. D1 Tables and Common Queries
+
+This project mainly writes to these two D1 tables:
+
+| Route / feature | D1 table name | Description |
+| --- | --- | --- |
+| `/form` | `form_submissions` | Records written by the main anonymous submission form |
+| `/map/correction` | `institution_correction_submissions` | Records written by the institution correction form |
+
+First, list the D1 databases available in your account:
+
+```bash
+npx wrangler d1 list
+```
+
+To query the remote production database, replace `<your-database-name>` below and keep `--remote`:
+
+```bash
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
+Common query examples:
+
+```bash
+# Latest 20 /form submissions
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, contact_information, created_at FROM form_submissions ORDER BY created_at DESC LIMIT 20;"
+
+# Latest 20 /map/correction submissions
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, correction_content, status, created_at FROM institution_correction_submissions ORDER BY created_at DESC LIMIT 20;"
+
+# Search /form by institution name
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, province_name, city_name, created_at FROM form_submissions WHERE school_name LIKE '%institution name%' ORDER BY created_at DESC;"
+
+# Search /map/correction by institution name
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, correction_content, status, created_at FROM institution_correction_submissions WHERE school_name LIKE '%institution name%' ORDER BY created_at DESC;"
+```
+
+If you only need the SQL itself, use:
+
+```sql
+SELECT name
+FROM sqlite_master
+WHERE type = 'table'
+ORDER BY name;
+
+SELECT id, school_name, contact_information, created_at
+FROM form_submissions
+ORDER BY created_at DESC
+LIMIT 20;
+
+SELECT id, school_name, correction_content, status, created_at
+FROM institution_correction_submissions
+ORDER BY created_at DESC
+LIMIT 20;
+
+SELECT *
+FROM form_submissions
+WHERE school_name LIKE '%institution name%'
+ORDER BY created_at DESC;
+
+SELECT *
+FROM institution_correction_submissions
+WHERE school_name LIKE '%institution name%'
+ORDER BY created_at DESC;
+```
+
+Notes:
+
+- To inspect table columns, run `PRAGMA table_info(form_submissions);` or `PRAGMA table_info(institution_correction_submissions);`
+- `--remote` queries the real Cloudflare database, while `--local` queries the local Wrangler development database
+
+### 6. Bind the production domain
 
 If you do not want to use `*.workers.dev`, add a custom domain in `Settings -> Domains & Routes`. After binding the domain, remember to update:
 
 - `SITE_URL`
 - `PUBLIC_MAP_DATA_URL`
 
-### 6. Post-launch checklist
+### 7. Post-launch checklist
 
 After production deployment, it is a good idea to manually verify at least these paths:
 
@@ -384,16 +457,16 @@ After production deployment, it is a good idea to manually verify at least these
 - `/sitemap.xml`
 - `/robots.txt`
 
-If `FORM_DRY_RUN="false"`, also perform a real form submission test to confirm that data reaches Google Form successfully.
+If `FORM_DRY_RUN="false"`, also perform a real submission test to confirm that data reaches the currently configured target backend(s) successfully.
 
-### 7. Known differences on Workers
+### 8. Known differences on Workers
 
 - Templates, blog Markdown, and JSON files are read from the Workers `/bundle`.
 - The translation service no longer uses a `curl` subprocess fallback and now always uses Google Cloud Translation API directly.
 - On Workers, `sitemap.xml` prefers each article's `CreationDate` metadata as `lastmod`.
 - If shared Redis is not configured, rate limiting falls back to single-instance memory mode, so cross-instance consistency is weaker.
 
-### 8. FAQ
+### 9. FAQ
 
 **Q: Will local `npm start` conflict with the Workers version?**<br>
 A: No. They are simply two different local entry points.

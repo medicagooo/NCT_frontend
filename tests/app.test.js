@@ -1951,7 +1951,7 @@ test('submit route renders a confirmation page before sending to Google Form in 
     assert.equal(submitCallCount, 0);
     assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
     assert.match(response.body, /提交确认/);
-    assert.match(response.body, /这一步还没有发送到 Google Form/);
+    assert.match(response.body, /这一步还没有发送到实际提交目标/);
     assert.match(response.body, /name="confirmation_token"/);
     assert.match(response.body, /<textarea name="confirmation_payload" hidden>/);
     assert.match(response.body, /确认并提交/);

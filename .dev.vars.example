@@ -43,6 +43,9 @@ GOOGLE_SCRIPT_URL_ENCRYPTED=""
 
 # Local form behavior
 FORM_DRY_RUN="true"
+# google = 仅投递 Google Form
+# d1 = 仅写入 D1
+# both = 两边都投，任一成功即视为成功
 FORM_SUBMIT_TARGET="google"
 FORM_PROTECTION_MIN_FILL_MS="3000"
 FORM_PROTECTION_MAX_AGE_MS="86400000"
@@ -65,4 +68,5 @@ MAINTENANCE_RETRY_AFTER_SECONDS="1800"
 DEBUG_MOD="true"
 TRUST_PROXY="true"
 RATE_LIMIT_REDIS_URL=""
+# Only needed when your local D1 binding name is not DB / NCT_DB.
 D1_BINDING_NAME=""

@@ -91,7 +91,7 @@ const messages = {
     form: {
       title: 'NO CONVERSION THERAPY FORM',
       subtitle: '记录黑暗，是为了迎接光明',
-      privacyNotice: '隐私说明：本问卷中填写的出生年份、性别等个人基本信息将被严格保密，相关经历、机构曝光信息可能在本站公开页面展示。提交内容会通过 Google Form / Google 表格保存和整理；请勿在可能公开的字段中填写身份证号、私人电话、家庭住址等您的个人敏感信息。',
+      privacyNotice: '隐私说明：本问卷中填写的出生年份、性别等个人基本信息将被严格保密，相关经历、机构曝光信息可能在本站公开页面展示。提交内容会根据站点配置写入 Google Form、D1 数据库，或同时写入两者进行保存和整理；请勿在可能公开的字段中填写身份证号、私人电话、家庭住址等您的个人敏感信息。',
       sections: {
         basic: '个人基本信息',
         experience: '相关经历',
@@ -468,8 +468,8 @@ const messages = {
     },
     submitPreview: {
       title: '表单 Dry Run 预览',
-      intro: '这次提交没有发送到 Google Form。下面是本次本地组装出的最终字段和值。',
-      targetUrl: '目标网址：',
+      intro: '这次提交还没有发送到实际提交目标。下面是本次本地组装出的最终字段和值。',
+      targetUrl: 'Google Form 目标网址（若已启用）：',
       columns: {
         entry: 'Google Form Entry',
         field: '字段',
@@ -480,7 +480,7 @@ const messages = {
     },
     submitConfirm: {
       title: '提交确认',
-      intro: '这一步还没有发送到 Google Form。请确认以下内容无误后，再正式提交。',
+      intro: '这一步还没有发送到实际提交目标。请确认以下内容无误后，再正式提交。',
       targetUrl: '目标网址：',
       columns: {
         entry: 'Google Form Entry',
@@ -493,7 +493,7 @@ const messages = {
     },
     submitError: {
       title: '提交失败',
-      intro: '站内提交没有成功。你可以打开下面这个已预填内容的 Google Form 链接继续提交。',
+      intro: '站内提交没有成功。如果下方提供了已预填内容的 Google Form 链接，你也可以继续在那里提交。',
       privacyNote: '注意：下面这个链接包含你刚刚填写的表单内容，请不要随意分享。',
       proxyNote: '提示：如果你当前网络无法直接访问 Google 服务，打开 Google Form 页面可能需要网络代理。',
       openFallback: '打开 Google Form 继续提交',
@@ -715,7 +715,7 @@ const messages = {
     form: {
       title: 'NO CONVERSION THERAPY FORM',
       subtitle: '記錄黑暗，是為了迎接光明',
-      privacyNotice: '隱私說明：本問卷中填寫的出生年份、性別等個人基本資訊將被嚴格保密，相關經歷、機構曝光資訊可能在本站公開頁面展示。提交內容會透過 Google Form / Google 試算表保存和整理；請勿在可能公開的欄位中填寫身分證號、私人電話、家庭住址等您的個人敏感資訊。',
+      privacyNotice: '隱私說明：本問卷中填寫的出生年份、性別等個人基本資訊將被嚴格保密，相關經歷、機構曝光資訊可能在本站公開頁面展示。提交內容會依站點配置寫入 Google Form、D1 資料庫，或同時寫入兩者進行保存和整理；請勿在可能公開的欄位中填寫身分證號、私人電話、家庭住址等您的個人敏感資訊。',
       sections: {
         basic: '個人基本資訊',
         experience: '相關經歷',
@@ -1092,8 +1092,8 @@ const messages = {
     },
     submitPreview: {
       title: '表單乾跑預覽',
-      intro: '這次提交沒有發送到 Google Form。下面是本次本地組裝出的最終欄位和值。',
-      targetUrl: '目標網址：',
+      intro: '這次提交還沒有發送到實際提交目標。下面是本次本地組裝出的最終欄位和值。',
+      targetUrl: 'Google Form 目標網址（若已啟用）：',
       columns: {
         entry: 'Google Form Entry',
         field: '欄位',
@@ -1104,7 +1104,7 @@ const messages = {
     },
     submitConfirm: {
       title: '提交確認',
-      intro: '這一步還沒有發送到 Google Form。請確認以下內容無誤後，再正式提交。',
+      intro: '這一步還沒有發送到實際提交目標。請確認以下內容無誤後，再正式提交。',
       targetUrl: '目標網址：',
       columns: {
         entry: 'Google Form Entry',
@@ -1117,7 +1117,7 @@ const messages = {
     },
     submitError: {
       title: '提交失敗',
-      intro: '站內提交沒有成功。你可以打開下面這個已預填內容的 Google Form 連結繼續提交。',
+      intro: '站內提交沒有成功。如果下方提供了已預填內容的 Google Form 連結，你也可以繼續在那裡提交。',
       privacyNote: '注意：下面這個連結包含你剛剛填寫的表單內容，請不要隨意分享。',
       proxyNote: '提示：如果你目前的網路無法直接存取 Google 服務，打開 Google Form 頁面可能需要網路代理。',
       openFallback: '打開 Google Form 繼續提交',
@@ -1339,7 +1339,7 @@ const messages = {
     form: {
       title: 'NO CONVERSION THERAPY FORM',
       subtitle: 'We document the darkness in order to welcome the light.',
-      privacyNotice: 'Privacy notice: personal details such as birth year and sex provided in this questionnaire will be kept strictly confidential, while related experiences and institution exposure information may be shown on public pages of this site. Submitted content is stored and organized through Google Forms / Google Sheets. Please do not include ID numbers, private phone numbers, home addresses, or other sensitive personal information in fields that may be made public.',
+      privacyNotice: 'Privacy notice: personal details such as birth year and sex provided in this questionnaire will be kept strictly confidential, while related experiences and institution exposure information may be shown on public pages of this site. Submitted content may be written to Google Form, the D1 database, or both, depending on the site configuration. Please do not include ID numbers, private phone numbers, home addresses, or other sensitive personal information in fields that may be made public.',
       sections: {
         basic: 'Personal Information',
         experience: 'Related Experience',
@@ -1716,8 +1716,8 @@ const messages = {
     },
     submitPreview: {
       title: 'Dry Run Preview',
-      intro: 'This submission was not sent to Google Form. Below is the final field set and value payload assembled locally.',
-      targetUrl: 'Target URL:',
+      intro: 'This submission has not been sent to the live submission target yet. Below is the final field set and value payload assembled locally.',
+      targetUrl: 'Google Form Target URL (if enabled):',
       columns: {
         entry: 'Google Form Entry',
         field: 'Field',
@@ -1728,7 +1728,7 @@ const messages = {
     },
     submitConfirm: {
       title: 'Confirm Submission',
-      intro: 'This step has not sent anything to Google Form yet. Please review the content below before confirming the final submission.',
+      intro: 'This step has not sent anything to the live submission target yet. Please review the content below before confirming the final submission.',
       targetUrl: 'Target URL:',
       columns: {
         entry: 'Google Form Entry',
@@ -1741,7 +1741,7 @@ const messages = {
     },
     submitError: {
       title: 'Submission Failed',
-      intro: 'The in-site submission did not complete successfully. You can continue by opening the Google Form link below with your data prefilled.',
+      intro: 'The in-site submission did not complete successfully. If a prefilled Google Form fallback link is available below, you can continue there.',
       privacyNote: 'Note: the link below contains the form content you just entered, so please do not share it casually.',
       proxyNote: 'Note: if your current network cannot access Google services directly, opening the Google Form page may require a network proxy.',
       openFallback: 'Open Google Form to Continue',

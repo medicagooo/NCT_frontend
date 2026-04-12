@@ -82,7 +82,7 @@ N·C·T 是一个用来记录、整理、公开展示“扭转治疗”相关机
 | 模板引擎 | EJS |
 | 前端 | 原生 JavaScript + Leaflet + Chart.js |
 | 部署运行时 | Node.js / Cloudflare Workers |
-| 数据写入 | Google Form |
+| 数据写入 | Google Form / D1（按配置启用） |
 | 地图数据源 | Google Apps Script 私有源，可回退到公开 API |
 | 翻译能力 | Google Cloud Translation API，可选启用 |
 | 配置安全 | 自带 `secure-config` 密文生成工具 |
@@ -109,10 +109,12 @@ flowchart TD
   P --> C1[内容与站点数据<br/>blog/*.md / data.json / friends.json]
   P --> S1[站点输出<br/>robots.txt / sitemap.xml]
 
-  F --> FS[formService<br/>表单校验 + Google Form 字段映射]
+  F --> FS[formService<br/>表单校验 + 提交字段整理]
   F --> FP[formProtectionService<br/>honeypot + 填写耗时 token]
   F --> FC[formConfirmationService<br/>确认签名]
+  F --> FD1[formSubmissionStorageService<br/>D1 存储]
   F --> GF[(Google Form)]
+  F --> D1[(D1)]
 
   I --> MD[mapDataService<br/>地图缓存 + 私有源优先 + 公开源回退]
   I --> TS[textTranslationService<br/>翻译缓存 + 冷却机制]
@@ -182,7 +184,7 @@ npm run dev:workers
 
 建议：
 
-- 本地开发先保持 `FORM_DRY_RUN="true"`，避免误提交到正式 Google Form。
+- 本地开发先保持 `FORM_DRY_RUN="true"`，避免误提交到正式环境的实际接收端。
 - Node 模式使用 `.env`，Workers 模式使用 `.dev.vars`，不要混用。
 - 完整配置注释请直接查看 [`.env.example`](./.env.example) 与 [`.dev.vars.example`](./.dev.vars.example)。
 
@@ -228,7 +230,7 @@ README 只保留最常用配置；完整变量说明请查看 [`.env.example`](.
 | 变量 | 用途 |
 | --- | --- |
 | `SITE_URL` | 站点正式网址，用于 sitemap、robots 与 canonical 输出 |
-| `FORM_DRY_RUN` | `true` 时只预览提交，不真正发往 Google Form |
+| `FORM_DRY_RUN` | `true` 时只预览提交，不真正发往已配置的提交目标 |
 | `FORM_SUBMIT_TARGET` | `/form` 提交目标，可选 `google`、`d1`、`both`，默认 `google` |
 | `FORM_PROTECTION_SECRET` | 表单保护与密文解密的核心 secret，正式环境务必显式配置 |
 | `FORM_ID` / `FORM_ID_ENCRYPTED` | Google Form ID，二选一 |
@@ -275,7 +277,7 @@ Workers 本地调试时，也可以改读 `.dev.vars`：
 npm run secure-config -- bootstrap-env --env-file ".dev.vars"
 ```
 
-> 提示：本地运行环境在中国大陆地区时，表单实际提交到 Google Form 可能受到网络环境影响。开发时建议先使用 `FORM_DRY_RUN="true"`。
+> 提示：如果你的提交目标包含 Google Form，本地运行环境在中国大陆地区时，实际提交可能受到网络环境影响。开发时建议先使用 `FORM_DRY_RUN="true"`。
 
 如果你只想分步操作，也可以先生成 secret，再分别加密：
 
@@ -292,13 +294,13 @@ npm run secure-config -- encrypt --purpose google-script-url --secret "你的_FO
 
 - 这能降低明文出现在仓库、日志、普通配置栏位或调试页中的风险。
 - 这不是替代后端鉴权的方案。如果攻击者能读取服务端所有 secrets，密文与解密 secret 最终仍可能一起暴露。
-- 真正要防止绕过网站验证，最可靠的方法仍然是不要把最终写入入口设计成可匿名直打的公开 Google Form。
+- 真正要防止绕过网站验证，最可靠的方法仍然是不要把最终写入入口设计成可匿名直打的公开 Google Form，或其它公开匿名写入端点。
 
 ## 表单隐私说明
 
 当前表单页与 `/privacy` 页面对外使用的说明如下：
 
-> 隐私说明：本问卷中填写的出生年份、性别等个人基本信息将被严格保密，相关经历、机构曝光信息可能在本站公开页面展示。提交内容会通过 Google Form / Google 表格保存和整理；请勿在可能公开的字段中填写身份证号、私人电话、家庭住址等个人敏感信息。
+> 隐私说明：本问卷中填写的出生年份、性别等个人基本信息将被严格保密，相关经历、机构曝光信息可能在本站公开页面展示。提交内容会根据站点配置写入 Google Form、D1 数据库，或同时写入两者进行保存和整理；请勿在可能公开的字段中填写身份证号、私人电话、家庭住址等个人敏感信息。
 
 如果你后续调整了公开字段范围，记得同步更新：
 
@@ -365,14 +367,85 @@ npm test
 | `D1_BINDING_NAME` | Text | 仅当 D1 绑定名不是 `DB` / `NCT_DB` 时填写 |
 | `RATE_LIMIT_REDIS_URL` | Secret | 多实例部署建议配置 |
 
-### 5. 绑定正式域名
+### 5. D1 表名与常用查询
+
+当前项目写入 D1 时主要会使用这两张表：
+
+| 路径 / 功能 | D1 表名 | 说明 |
+| --- | --- | --- |
+| `/form` | `form_submissions` | 匿名表单主提交通道写入的记录 |
+| `/map/correction` | `institution_correction_submissions` | 机构信息补充 / 修正表单写入的记录 |
+
+先查当前账号下有哪些 D1 数据库：
+
+```bash
+npx wrangler d1 list
+```
+
+查询远程生产库时，推荐先把数据库名代入下面命令里的 `<your-database-name>`，并保留 `--remote`：
+
+```bash
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;"
+```
+
+常用查询示例：
+
+```bash
+# 查看 /form 最新 20 条
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, contact_information, created_at FROM form_submissions ORDER BY created_at DESC LIMIT 20;"
+
+# 查看 /map/correction 最新 20 条
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, correction_content, status, created_at FROM institution_correction_submissions ORDER BY created_at DESC LIMIT 20;"
+
+# 按机构名称搜索 /form
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, province_name, city_name, created_at FROM form_submissions WHERE school_name LIKE '%机构名%' ORDER BY created_at DESC;"
+
+# 按机构名称搜索 /map/correction
+npx wrangler d1 execute <your-database-name> --remote --command="SELECT id, school_name, correction_content, status, created_at FROM institution_correction_submissions WHERE school_name LIKE '%机构名%' ORDER BY created_at DESC;"
+```
+
+如果只想记 SQL，也可以直接使用下面这些语句：
+
+```sql
+SELECT name
+FROM sqlite_master
+WHERE type = 'table'
+ORDER BY name;
+
+SELECT id, school_name, contact_information, created_at
+FROM form_submissions
+ORDER BY created_at DESC
+LIMIT 20;
+
+SELECT id, school_name, correction_content, status, created_at
+FROM institution_correction_submissions
+ORDER BY created_at DESC
+LIMIT 20;
+
+SELECT *
+FROM form_submissions
+WHERE school_name LIKE '%机构名%'
+ORDER BY created_at DESC;
+
+SELECT *
+FROM institution_correction_submissions
+WHERE school_name LIKE '%机构名%'
+ORDER BY created_at DESC;
+```
+
+补充：
+
+- 想看某张表的字段结构，可执行 `PRAGMA table_info(form_submissions);` 或 `PRAGMA table_info(institution_correction_submissions);`
+- `--remote` 查的是 Cloudflare 上的真实数据库，`--local` 查的是本地 Wrangler 开发数据库
+
+### 6. 绑定正式域名
 
 如果你不想使用 `*.workers.dev`，可以在 `Settings -> Domains & Routes` 中新增自定义域名。绑定完成后，记得同步更新：
 
 - `SITE_URL`
 - `PUBLIC_MAP_DATA_URL`
 
-### 6. 上线后检查清单
+### 7. 上线后检查清单
 
 正式部署完成后，建议至少手动验证以下路径：
 
@@ -384,16 +457,16 @@ npm test
 - `/sitemap.xml`
 - `/robots.txt`
 
-如果 `FORM_DRY_RUN="false"`，也要实测表单是否能成功送到 Google Form。
+如果 `FORM_DRY_RUN="false"`，也要实测表单是否能成功送到当前配置的提交目标（Google Form、D1，或两者）。
 
-### 7. Workers 上的已知差异
+### 8. Workers 上的已知差异
 
 - 模板、博客 Markdown 与 JSON 文件会从 Workers 的 `/bundle` 读取。
 - 翻译服务已移除 `curl` 子进程兜底，现在固定使用 Google Cloud Translation API。
 - `sitemap.xml` 在 Workers 上会优先使用文章元数据中的 `CreationDate` 作为 `lastmod`。
 - 若未配置共享 Redis，限流会退回单实例内存模式，跨实例一致性较弱。
 
-### 8. 常见问题
+### 9. 常见问题
 
 **Q: 本地 `npm start` 和 Workers 版本会冲突吗？**<br>
 A: 不会。两者只是不同的本地运行入口。
