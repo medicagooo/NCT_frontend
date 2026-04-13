@@ -68,6 +68,7 @@ N·C·T is a site for documenting, organizing, and publicly presenting informati
 | Area | Description |
 | --- | --- |
 | Anonymous submission | Anonymous form flow with anti-abuse protection, rate limiting, and audit logging |
+| Institution correction | Provides the `/map/correction` supplement / correction flow and stores submissions in D1 |
 | Public map | Public institution map plus `GET /api/map-data` for downstream reuse |
 | Blog content | Blog index, article pages, and Markdown rendering |
 | Multilingual UI | Simplified Chinese, Traditional Chinese, English, plus selective dynamic translation |
@@ -103,6 +104,7 @@ flowchart TD
   A --> M[Middleware layer<br/>Helmet / i18n / Maintenance / Body Parser]
   A --> P[Page routes<br/>app/routes/pageRoutes.js]
   A --> F[Form routes<br/>app/routes/formRoutes.js]
+  A --> IC[Institution correction routes<br/>app/routes/institutionCorrectionRoutes.js]
   A --> I[API routes<br/>app/routes/apiRoutes.js]
 
   P --> V[View templates<br/>views/*.ejs]
@@ -115,6 +117,10 @@ flowchart TD
   F --> FD1[formSubmissionStorageService<br/>D1 persistence]
   F --> GF[(Google Form)]
   F --> D1[(D1)]
+
+  IC --> FP
+  IC --> ICS[institutionCorrectionService<br/>validation + D1 persistence]
+  ICS --> D1
 
   I --> MD[mapDataService<br/>cache + private-source priority + public fallback]
   I --> TS[textTranslationService<br/>translation cache + cooldown logic]
@@ -134,7 +140,7 @@ flowchart TD
 Notes:
 
 - Node.js and Workers share the same Express business logic. Workers only add entry-layer protection for large JSON responses.
-- Page routes, form routes, and API routes are separated, while core logic is pushed down into the `service` layer.
+- Page routes, anonymous form routes, institution correction routes, and API routes are separated, while core logic is pushed down into the `service` layer.
 - The map page, form cascading selectors, and autocomplete reuse the same `/api/*` endpoints instead of maintaining parallel data flows.
 
 ## Repository Layout
@@ -151,8 +157,13 @@ Notes:
 ├── public/                # static assets, GeoJSON, frontend scripts, styles
 ├── views/                 # EJS templates
 ├── blog/                  # Markdown blog articles
+├── migrations/            # D1 database migrations
 ├── scripts/               # utility scripts such as secure-config
 ├── tests/                 # automated tests
+├── data.json              # blog index and other site data
+├── friends.json           # about page links / acknowledgements
+├── server.js              # Vercel / Node compatible entry
+├── vercel.json            # Vercel deployment config
 └── worker.mjs             # Cloudflare Workers entry
 ```
 
@@ -171,7 +182,6 @@ npm install
 Node mode:
 
 ```bash
-cp .env.example .env
 npm start
 ```
 
@@ -184,9 +194,10 @@ npm run dev:workers
 
 Recommendations:
 
+- The repository currently does not include `.env.example`. If you need custom Node environment variables, create `.env` manually by following [`.dev.vars.example`](./.dev.vars.example) and remove the Workers-only `RUNTIME_TARGET`.
 - Keep `FORM_DRY_RUN="true"` during local development to avoid accidental writes to live production targets.
 - Use `.env` for Node mode and `.dev.vars` for Workers mode. Do not mix them.
-- For full inline configuration notes, read [`.env.example`](./.env.example) and [`.dev.vars.example`](./.dev.vars.example).
+- Full inline configuration notes currently live in [`.dev.vars.example`](./.dev.vars.example). For Node mode, write the same variable names into `.env`.
 
 ## Common Commands
 
@@ -225,7 +236,7 @@ Environment notes:
 
 ## Key Configuration
 
-This README only lists the most important variables. For the full set, see [`.env.example`](./.env.example).
+This README only lists the most important variables. For the full set, see [`.dev.vars.example`](./.dev.vars.example). In Node mode, put the same variable names into `.env`.
 
 | Variable | Purpose |
 | --- | --- |
@@ -501,12 +512,16 @@ After production deployment, it is a good idea to manually verify at least these
 - `/`
 - `/map`
 - `/form`
+- `/map/correction`
 - `/blog`
 - `/api/map-data`
+- `/api/area-options?provinceCode=110000`
+- `/cn.json`
 - `/sitemap.xml`
 - `/robots.txt`
 
 If `FORM_DRY_RUN="false"`, also perform a real submission test to confirm that data reaches the currently configured target backend(s) successfully.
+If translation is enabled, also test `POST /api/translate-text`.
 
 ### 9. Known differences on Workers
 
@@ -530,10 +545,15 @@ A: Because it calls `npx wrangler deploy` and stays aligned with this repository
 
 By default, every page route passes through the i18n middleware, so the UI language can be switched with `?lang=zh-CN`, `?lang=zh-TW`, or `?lang=en`. If maintenance mode is enabled, both pages and APIs are intercepted by the maintenance layer first.
 
+### Page Routes
+
 | Path | Description | Notes |
 | --- | --- | --- |
+| `/robots.txt` | Generated robots policy | Produced by `robotsService` |
+| `/sitemap.xml` | Generated sitemap | Reads `blog/` and `data.json` |
 | `/` | Home page with links to the form, map, and library | Renders `views/index.ejs` |
 | `/form` | Anonymous form page that injects area options, frontend validation rules, and anti-abuse tokens | Sends sensitive-page headers and is excluded from indexing |
+| `/map/correction` | Institution information supplement / correction page | Submits to `POST /map/correction/submit`; the write step requires a working D1 binding |
 | `/map` | Map overview page showing institution distribution, statistics, and the public data list | Supports `?inputType=` preset filtering |
 | `/map/record/:recordSlug` | Map submission detail page that renders a standalone submission view and supports previous / next navigation within the same institution | Entered from the `/map` "View detail page" action and renders `views/map_record.ejs` |
 | `/aboutus` | About page with project information and acknowledgements / friend links | Reads `friends.json` |
@@ -543,10 +563,29 @@ By default, every page route passes through the i18n middleware, so the UI langu
 | `/debug` | Debug page showing the current language, API URL, debug mode, and related runtime details | Only available when `DEBUG_MOD=true` |
 | `/debug/submit-error` | Standalone preview of the submission error page with a prefilled Google Form fallback link | Only available when `DEBUG_MOD=true` |
 
+### Submission Routes
+
+| Path | Description | Notes |
+| --- | --- | --- |
+| `POST /submit` | Entry point for anonymous form submissions | Returns a preview page when `FORM_DRY_RUN=true`, otherwise moves to the confirmation step |
+| `POST /submit/confirm` | Final submission step after confirmation | Writes to Google Form, D1, or both depending on `FORM_SUBMIT_TARGET` |
+| `POST /map/correction/submit` | Entry point for institution supplement / correction submissions | Writes to D1 only; returns 503 if no usable binding is available |
+
+### API and Static Data Routes
+
+| Path | Description | Notes |
+| --- | --- | --- |
+| `/api/area-options` | Returns province / city / county cascading options | Pass `provinceCode` for cities or `cityCode` for counties |
+| `/api/map-data` | Returns aggregated map payload | Supports `?refresh=1` for a forced refresh and has stricter refresh rate limiting |
+| `POST /api/translate-text` | On-demand translation for a small set of map detail fields | Requires `GOOGLE_CLOUD_TRANSLATION_API_KEY` |
+| `/cn.json` | Returns the China GeoJSON used by the map | Both Node and Workers add large-file integrity protection |
+
 ## Related Files
 
-- [`.env.example`](./.env.example): example environment variables for Node mode
-- [`.dev.vars.example`](./.dev.vars.example): example local Workers variables
+- [`.dev.vars.example`](./.dev.vars.example): local environment variable template; for Node mode, create `.env` with the same variable names
+- [`migrations/`](./migrations): D1 schema migrations
+- [`server.js`](./server.js): Vercel / Node compatible entry
+- [`vercel.json`](./vercel.json): Vercel deployment config
 - [`wrangler.jsonc`](./wrangler.jsonc): Workers configuration
 - [`scripts/secure-config.js`](./scripts/secure-config.js): encryption helper for sensitive config
 - [`worker.mjs`](./worker.mjs): Cloudflare Workers entry
@@ -619,6 +658,14 @@ Field notes:
 ```
 
 If you want to turn the data into a map, you can use it directly with frontend mapping libraries such as [Leaflet](https://leafletjs.com). This project's own `/map` page is a complete example.
+
+### Other Frontend-Facing Endpoints
+
+| Endpoint | Purpose | Method / Parameters |
+| --- | --- | --- |
+| `/api/area-options` | Cascading province/city/county options for the form and institution correction page | `GET`; pass `provinceCode` or `cityCode` |
+| `/api/translate-text` | Small-batch translation for map detail fields | `POST` JSON; send `items` and `targetLanguage`, and configure a translation provider on the server |
+| `/cn.json` | China GeoJSON consumed by the map | `GET` |
 
 ---
 

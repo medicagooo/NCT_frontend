@@ -68,6 +68,7 @@ N·C·T 是一个用来记录、整理、公开展示“扭转治疗”相关机
 | 模块 | 说明 |
 | --- | --- |
 | 匿名表单 | 支持匿名提交，带基础防刷、限流与审计日志 |
+| 机构修正 | 提供 `/map/correction` 补充 / 修正提交通道，并写入 D1 |
 | 公开地图 | 对外展示机构数据，并提供 `GET /api/map-data` 接口 |
 | 博客内容 | 支持博客列表、文章详情与 Markdown 渲染 |
 | 多语言界面 | 支持简体中文、繁体中文、英文，以及部分动态翻译 |
@@ -103,6 +104,7 @@ flowchart TD
   A --> M[中间件层<br/>Helmet / i18n / Maintenance / Body Parser]
   A --> P[页面路由<br/>app/routes/pageRoutes.js]
   A --> F[表单路由<br/>app/routes/formRoutes.js]
+  A --> IC[机构修正路由<br/>app/routes/institutionCorrectionRoutes.js]
   A --> I[API 路由<br/>app/routes/apiRoutes.js]
 
   P --> V[视图模板<br/>views/*.ejs]
@@ -115,6 +117,10 @@ flowchart TD
   F --> FD1[formSubmissionStorageService<br/>D1 存储]
   F --> GF[(Google Form)]
   F --> D1[(D1)]
+
+  IC --> FP
+  IC --> ICS[institutionCorrectionService<br/>校验 + D1 持久化]
+  ICS --> D1
 
   I --> MD[mapDataService<br/>地图缓存 + 私有源优先 + 公开源回退]
   I --> TS[textTranslationService<br/>翻译缓存 + 冷却机制]
@@ -134,7 +140,7 @@ flowchart TD
 补充说明：
 
 - Node.js 与 Workers 共用同一套 Express 业务逻辑，Workers 只在入口层额外保护大 JSON 响应。
-- 页面、表单、API 三类路由分开管理，主要业务逻辑沉到 `service` 层。
+- 页面、匿名表单、机构修正、API 四类路由分开管理，主要业务逻辑沉到 `service` 层。
 - 地图页、表单联动和自动补全共用 `/api/*` 能力，避免维护多套数据入口。
 
 ## 仓库结构
@@ -151,8 +157,13 @@ flowchart TD
 ├── public/                # 静态资源、GeoJSON、前端脚本与样式
 ├── views/                 # EJS 模板
 ├── blog/                  # Markdown 博客文章
+├── migrations/            # D1 数据库迁移
 ├── scripts/               # 运维脚本，例如 secure-config
 ├── tests/                 # 自动化测试
+├── data.json              # 博客索引等站点数据
+├── friends.json           # 关于页友链 / 致谢数据
+├── server.js              # Vercel / Node 兼容入口
+├── vercel.json            # Vercel 部署配置
 └── worker.mjs             # Cloudflare Workers 入口
 ```
 
@@ -171,7 +182,6 @@ npm install
 Node 模式：
 
 ```bash
-cp .env.example .env
 npm start
 ```
 
@@ -184,9 +194,10 @@ npm run dev:workers
 
 建议：
 
+- 仓库当前未附带 `.env.example`；如果需要自定义 Node 环境变量，请手动创建 `.env`，变量名可参考 [`.dev.vars.example`](./.dev.vars.example)，并去掉 Workers 专用的 `RUNTIME_TARGET`。
 - 本地开发先保持 `FORM_DRY_RUN="true"`，避免误提交到正式环境的实际接收端。
 - Node 模式使用 `.env`，Workers 模式使用 `.dev.vars`，不要混用。
-- 完整配置注释请直接查看 [`.env.example`](./.env.example) 与 [`.dev.vars.example`](./.dev.vars.example)。
+- 完整配置注释目前以 [`.dev.vars.example`](./.dev.vars.example) 为准；Node 模式可沿用同名变量写入 `.env`。
 
 ## 常用命令
 
@@ -225,7 +236,7 @@ npm run test:smoke
 
 ## 关键配置
 
-README 只保留最常用配置；完整变量说明请查看 [`.env.example`](./.env.example)。
+README 只保留最常用配置；完整变量说明请查看 [`.dev.vars.example`](./.dev.vars.example)。Node 模式请按相同变量名写入 `.env`。
 
 | 变量 | 用途 |
 | --- | --- |
@@ -468,12 +479,16 @@ ORDER BY created_at DESC;
 - `/`
 - `/map`
 - `/form`
+- `/map/correction`
 - `/blog`
 - `/api/map-data`
+- `/api/area-options?provinceCode=110000`
+- `/cn.json`
 - `/sitemap.xml`
 - `/robots.txt`
 
 如果 `FORM_DRY_RUN="false"`，也要实测表单是否能成功送到当前配置的提交目标（Google Form、D1，或两者）。
+如果已配置翻译服务，也建议再补测 `POST /api/translate-text`。
 
 ### 9. Workers 上的已知差异
 
@@ -497,23 +512,47 @@ A: 因为它会调用 `npx wrangler deploy`，并且与本仓库的 `package.jso
 
 默认情况下，所有页面路由都会经过 i18n 中间件，因此都支持通过 `?lang=zh-CN`、`?lang=zh-TW`、`?lang=en` 切换界面语言。若开启维护模式，页面与 API 还会先经过维护拦截。
 
+### 页面路由
+
 | 路径 | 说明 | 备注 |
 | --- | --- | --- |
+| `/robots.txt` | 自动生成 robots 策略 | 由 `robotsService` 输出 |
+| `/sitemap.xml` | 自动生成站点地图 | 会读取 `blog/` 与 `data.json` |
 | `/` | 站点首页，提供表单、地图、文库等入口 | 对应 `views/index.ejs` |
 | `/form` | 匿名表单页，下发地区选项、前端校验规则与防刷 token | 会附带敏感页面响应头，禁止索引 |
+| `/map/correction` | 机构信息补充 / 修正页 | 提交到 `POST /map/correction/submit`；实际写入时需要可用 D1 绑定 |
 | `/map` | 地图总览页，展示机构分布、统计与公开数据列表 | 支持 `?inputType=` 预设筛选 |
 | `/map/record/:recordSlug` | 地图提交详情页，独立展示单条提交内容并支持同机构记录上下翻页 | 从 `/map` 的“查看详情页”进入，对应 `views/map_record.ejs` |
-| `/aboutus` | 关于页，展示项目说明与友链/致谢信息 | 会读取 `friends.json` |
+| `/aboutus` | 关于页，展示项目说明与友链 / 致谢信息 | 会读取 `friends.json` |
 | `/privacy` | 隐私政策与 Cookie 说明页 | 用于公开说明数据使用边界 |
 | `/blog` | 文库列表页，展示博客文章与标签筛选 | 支持 `?tag=<tagId>` |
 | `/port/:id` | 单篇文章详情页 | `:id` 会严格限制在 `blog/` 目录内解析，防止路径穿越 |
 | `/debug` | 调试页，展示当前语言、API 地址、调试模式等信息 | 仅 `DEBUG_MOD=true` 时可访问 |
 | `/debug/submit-error` | 提交失败页预览，方便单独查看错误页样式与预填 Google Form 链接 | 仅 `DEBUG_MOD=true` 时可访问 |
 
+### 提交流程路由
+
+| 路径 | 说明 | 备注 |
+| --- | --- | --- |
+| `POST /submit` | 匿名表单提交入口 | `FORM_DRY_RUN=true` 时返回预览页，否则进入确认页 |
+| `POST /submit/confirm` | 匿名表单确认后的最终提交入口 | 按 `FORM_SUBMIT_TARGET` 写入 Google Form、D1，或同时写入两者 |
+| `POST /map/correction/submit` | 机构补充 / 修正提交入口 | 仅写入 D1；未配置可用绑定时会返回 503 |
+
+### API 与静态数据路由
+
+| 路径 | 说明 | 备注 |
+| --- | --- | --- |
+| `/api/area-options` | 返回省 / 市 / 县区联动选项 | 传 `provinceCode` 取城市，传 `cityCode` 取县区 |
+| `/api/map-data` | 返回地图聚合数据 | 支持 `?refresh=1` 强制刷新，并受更严格限流保护 |
+| `POST /api/translate-text` | 对地图详情中的少量字段做按需翻译 | 需要配置 `GOOGLE_CLOUD_TRANSLATION_API_KEY` |
+| `/cn.json` | 返回地图使用的中国 GeoJSON | Node 与 Workers 都做了大文件完整性保护 |
+
 ## 相关文件
 
-- [`.env.example`](./.env.example)：Node 模式环境变量示例
-- [`.dev.vars.example`](./.dev.vars.example)：Workers 本地调试示例
+- [`.dev.vars.example`](./.dev.vars.example)：本地环境变量模板；Node 模式可按同名变量手动创建 `.env`
+- [`migrations/`](./migrations)：D1 表结构迁移
+- [`server.js`](./server.js)：Vercel / Node 兼容入口
+- [`vercel.json`](./vercel.json)：Vercel 部署配置
 - [`wrangler.jsonc`](./wrangler.jsonc)：Workers 配置
 - [`scripts/secure-config.js`](./scripts/secure-config.js)：敏感配置加密工具
 - [`worker.mjs`](./worker.mjs)：Cloudflare Workers 入口
@@ -586,6 +625,14 @@ https://你的域名/api/map-data
 ```
 
 如果你想把数据做成地图，可直接配合 [Leaflet](https://leafletjs.com) 等前端地图库使用；本项目自己的 `/map` 页面就是一个完整示例。
+
+### 其他前端接口
+
+| 接口 | 用途 | 请求方式 / 参数 |
+| --- | --- | --- |
+| `/api/area-options` | 表单和机构修正页的省市区联动选项 | `GET`；传 `provinceCode` 或 `cityCode` |
+| `/api/translate-text` | 地图详情字段的小批量翻译 | `POST` JSON；需传 `items` 与 `targetLanguage`，且服务端已配置翻译能力 |
+| `/cn.json` | 地图底图使用的中国 GeoJSON 数据 | `GET` |
 
 ---
 

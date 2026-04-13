@@ -410,7 +410,7 @@ test('maintenance mode serves a 503 maintenance page for HTML requests', async (
 
   assert.equal(response.statusCode, 503);
   assert.equal(response.headers['retry-after'], '900');
-  assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
+  assert.equal(response.headers['x-robots-tag'], undefined);
   assert.match(response.headers['cache-control'], /no-store/);
   assert.match(response.body, /网站正在维护中/);
   assert.match(response.body, /站点资料正在同步，请稍后再试。/);
@@ -418,6 +418,7 @@ test('maintenance mode serves a 503 maintenance page for HTML requests', async (
   assert.match(response.body, /\/js\/language_switcher\.js/);
   assert.match(response.body, /backdrop-filter: blur\(28px\)/);
   assert.match(response.body, /@media \(prefers-color-scheme: dark\)/);
+  assert.doesNotMatch(response.body, /<meta name="robots"/i);
   assert.doesNotMatch(response.body, /Suggested retry/);
   assert.doesNotMatch(response.body, /503 Service Unavailable/);
   assert.doesNotMatch(response.body, /The server is returning a standard 503 response/);
@@ -744,16 +745,16 @@ test('form page recomputes birth year options for long-lived runtimes', async ()
   clearProjectModules();
 });
 
-test('form page disables indexing and caching because it issues sensitive submission tokens', async () => {
+test('form page keeps caching disabled without adding crawl restrictions', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/form');
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
+  assert.equal(response.headers['x-robots-tag'], undefined);
   assert.equal(response.headers['surrogate-control'], 'no-store');
   assert.match(response.headers['cache-control'], /private/);
   assert.match(response.headers['cache-control'], /no-store/);
-  assert.match(response.body, /<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">/);
+  assert.doesNotMatch(response.body, /<meta name="robots"/i);
 });
 
 test('area options API localizes city options for the current language', async () => {
@@ -819,7 +820,7 @@ test('sitemap.xml lists static pages and blog articles', async () => {
   assert.doesNotMatch(response.body, /<loc>https:\/\/example\.com\/form<\/loc>/);
 });
 
-test('robots.txt exposes sitemap and blocks non-indexable routes', async () => {
+test('robots.txt exposes sitemap and allows all routes to be crawled', async () => {
   const app = loadApp({
     DEBUG_MOD: 'false',
     SITE_URL: 'https://example.com'
@@ -830,10 +831,7 @@ test('robots.txt exposes sitemap and blocks non-indexable routes', async () => {
   assert.match(response.headers['content-type'], /text\/plain/);
   assert.match(response.body, /^User-agent: \*$/m);
   assert.match(response.body, /^Allow: \/$/m);
-  assert.match(response.body, /^Disallow: \/api\/$/m);
-  assert.match(response.body, /^Disallow: \/form$/m);
-  assert.match(response.body, /^Disallow: \/submit$/m);
-  assert.match(response.body, /^Disallow: \/debug$/m);
+  assert.doesNotMatch(response.body, /^Disallow: /m);
   assert.match(response.body, /^Crawl-delay: 5$/m);
   assert.match(response.body, /^Sitemap: https:\/\/example\.com\/sitemap\.xml$/m);
 });
@@ -1802,10 +1800,10 @@ test('submit route still accepts a valid protected form in dry run mode', async 
   });
 
   assert.equal(response.statusCode, 200);
-  assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
+  assert.equal(response.headers['x-robots-tag'], undefined);
   assert.equal(response.headers['surrogate-control'], 'no-store');
   assert.match(response.headers['cache-control'], /no-store/);
-  assert.match(response.body, /<meta name="robots" content="noindex, nofollow, noarchive, nosnippet">/);
+  assert.doesNotMatch(response.body, /<meta name="robots"/i);
   assert.match(response.body, /entry\.5034928/);
   assert.match(response.body, /测试机构/);
   assert.match(response.body, new RegExp(`entry\\.842223433</code></td>\\s*<td>出生年份</td>\\s*<td>${expectedAge}</td>`));
@@ -1950,12 +1948,13 @@ test('submit route renders a confirmation page before sending to Google Form in 
 
     assert.equal(response.statusCode, 200);
     assert.equal(submitCallCount, 0);
-    assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
+    assert.equal(response.headers['x-robots-tag'], undefined);
     assert.match(response.body, /提交确认/);
     assert.match(response.body, /这一步还没有发送到实际提交目标/);
     assert.match(response.body, /name="confirmation_token"/);
     assert.match(response.body, /<textarea name="confirmation_payload" hidden>/);
     assert.match(response.body, /确认并提交/);
+    assert.doesNotMatch(response.body, /<meta name="robots"/i);
     assert.doesNotMatch(response.body, /<strong>\s*目标网址：\s*<\/strong>/);
     assert.doesNotMatch(response.body, /<th>\s*Google Form Entry\s*<\/th>/);
     assert.doesNotMatch(response.body, /<td><code>entry\./);

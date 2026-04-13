@@ -4,11 +4,6 @@ function generateRobotsTxt(siteUrl) {
   const lines = [
     'User-agent: *',
     'Allow: /',
-    'Disallow: /api/',
-    'Disallow: /form',
-    'Disallow: /map/correction',
-    'Disallow: /submit',
-    'Disallow: /debug',
     'Crawl-delay: 5',
     `Sitemap: ${createAbsoluteUrl(siteUrl, '/sitemap.xml')}`
   ];

@@ -105,8 +105,9 @@ test('institution correction page renders a dedicated form and keeps only school
   assert.doesNotMatch(response.body, /<select[^>]+name="provinceCode"[^>]*required/);
   assert.doesNotMatch(response.body, /<select[^>]+name="cityCode"[^>]*required/);
   assert.doesNotMatch(response.body, /<input[^>]+name="contact_information"[^>]*required/);
-  assert.equal(response.headers['x-robots-tag'], 'noindex, nofollow, noarchive, nosnippet');
+  assert.equal(response.headers['x-robots-tag'], undefined);
   assert.match(response.headers['cache-control'], /no-store/);
+  assert.doesNotMatch(response.body, /<meta name="robots"/i);
 
   clearProjectModules();
 });
@@ -121,12 +122,12 @@ test('institution correction page pre-fills school name from the map record card
   clearProjectModules();
 });
 
-test('robots.txt blocks institution correction pages from indexing', async () => {
+test('robots.txt allows institution correction pages to be crawled', async () => {
   const app = loadApp({ DEBUG_MOD: 'false' });
   const response = await requestPath(app, '/robots.txt');
 
   assert.equal(response.statusCode, 200);
-  assert.match(response.body, /^Disallow: \/map\/correction$/m);
+  assert.doesNotMatch(response.body, /^Disallow: \/map\/correction$/m);
 
   clearProjectModules();
 });
