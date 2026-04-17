@@ -245,7 +245,7 @@ This README only lists the most important variables. For the full set, see [`.de
 | `FORM_SUBMIT_TARGET` | `/form` submission target: `google`, `d1`, or `both`; defaults to `both` |
 | `CORRECTION_SUBMIT_TARGET` | `/map/correction` and `/correction` submission target: `google`, `d1`, or `both`; defaults to `d1` |
 | `FORM_PROTECTION_SECRET` | Core secret for form protection and encrypted config decryption; when empty, the app derives one automatically |
-| `FORM_ID` / `FORM_ID_ENCRYPTED` | Google Form ID, choose one |
+| `FORM_ID` / `FORM_ID_ENCRYPTED` | Main form Google Form ID, choose one; falls back to the built-in default when omitted |
 | `CORRECTION_FORM_ID` / `CORRECTION_GOOGLE_FORM_URL` | Google Form used by institution correction; accepts a Form ID or full URL and falls back to the built-in default when omitted |
 | `GOOGLE_SCRIPT_URL` / `GOOGLE_SCRIPT_URL_ENCRYPTED` | Private Apps Script data source, choose one |
 | `PUBLIC_MAP_DATA_URL` | Public fallback source when the private source is slow or unavailable |
@@ -261,7 +261,7 @@ Configuration rules:
 - Choose only one of `GOOGLE_SCRIPT_URL` and `GOOGLE_SCRIPT_URL_ENCRYPTED`.
 - `FORM_SUBMIT_TARGET` accepts `google`, `d1`, and `both`, with `both` as the default.
 - `CORRECTION_SUBMIT_TARGET` accepts `google`, `d1`, and `both`, with `d1` as the default.
-- If `FORM_SUBMIT_TARGET` includes `google`, you still need `FORM_ID` or `FORM_ID_ENCRYPTED`.
+- If `FORM_SUBMIT_TARGET` includes `google`, you can set `FORM_ID` or `FORM_ID_ENCRYPTED` to override the main form; when omitted, the app uses the built-in default main form.
 - If `CORRECTION_SUBMIT_TARGET` includes `google`, configure `CORRECTION_FORM_ID` or `CORRECTION_GOOGLE_FORM_URL`, or let the app use the built-in default correction form.
 - If `FORM_SUBMIT_TARGET` includes `d1`, make sure your Worker has a D1 binding; if the binding name is not `NCT_DB` or `DB`, also set `D1_BINDING_NAME`.
 - If `CORRECTION_SUBMIT_TARGET` includes `d1`, the same D1 binding requirement applies.

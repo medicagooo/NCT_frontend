@@ -30,6 +30,17 @@ function createI18nMiddleware() {
     req.lang = language;
     req.t = (key, variables) => translate(language, key, variables);
 
+    const requestUrl = new URL(req.originalUrl || req.url || '/', 'http://localhost');
+    const currentQueryEntries = [];
+
+    requestUrl.searchParams.forEach((value, key) => {
+      if (key === 'lang') {
+        return;
+      }
+
+      currentQueryEntries.push({ key, value });
+    });
+
     // 模板和前端脚本共享同一份本地化上下文，减少每个页面单独拼装。
     res.locals.lang = language;
     res.locals.t = req.t;
@@ -38,6 +49,8 @@ function createI18nMiddleware() {
     );
     res.locals.clientMessages = getMessages(language);
     res.locals.languageOptions = getLanguageOptions(language);
+    res.locals.currentPathname = requestUrl.pathname || '/';
+    res.locals.currentQueryEntries = currentQueryEntries;
 
     next();
   };

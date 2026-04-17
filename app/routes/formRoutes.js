@@ -149,6 +149,17 @@ function buildFailedResultsByTarget(formSubmitTarget, errorMessage) {
   );
 }
 
+function resolveFlowTitle(req, flow, fallbackTitle = '') {
+  if (!flow || !flow.titleKey || !req || typeof req.t !== 'function') {
+    return fallbackTitle;
+  }
+
+  const translatedTitle = req.t(flow.titleKey);
+  return translatedTitle && translatedTitle !== flow.titleKey
+    ? translatedTitle
+    : fallbackTitle;
+}
+
 function renderSubmitFailurePage({
   encodedPayload,
   flow,
@@ -160,7 +171,8 @@ function renderSubmitFailurePage({
   submissionDiagnostics,
   title
 }) {
-  const pageTitle = req.t('pageTitles.submitError', { title });
+  const flowTitle = resolveFlowTitle(req, flow, title);
+  const pageTitle = req.t('pageTitles.submitError', { title: flowTitle });
   const fallbackUrl = shouldBuildGoogleFallbackUrl({ submitTarget: formSubmitTarget, googleFormUrl, encodedPayload })
     ? buildGoogleFormPrefillUrl(googleFormUrl, encodedPayload)
     : '';
@@ -223,6 +235,7 @@ function buildFormFlowConfigs() {
       },
       renderMode: 'legacy',
       submitPath: '/form/standalone/submit',
+      titleKey: 'form.standalone.title',
       views: {
         confirm: 'standalone_submit_confirm',
         error: 'standalone_submit_error',
@@ -241,6 +254,7 @@ function buildFormFlowConfigs() {
       },
       renderMode: 'legacy',
       submitPath: '/submit',
+      titleKey: 'form.standalone.title',
       views: {
         confirm: 'standalone_submit_confirm',
         error: 'standalone_submit_error',
@@ -312,7 +326,7 @@ function registerSubmissionFlowRoutes({
 
       // 干跑模式下直接渲染预览页，不真正请求 Google。
       if (formDryRun) {
-        const pageTitle = req.t('pageTitles.submitPreview', { title });
+        const pageTitle = req.t('pageTitles.submitPreview', { title: resolveFlowTitle(req, flow, title) });
 
         logAuditEvent(req, 'submit_preview_rendered', {
           fieldCount: fields.length,
@@ -354,7 +368,7 @@ function registerSubmissionFlowRoutes({
         payload: confirmationPayload,
         secret: formProtectionSecret
       });
-      const pageTitle = req.t('pageTitles.submitConfirm', { title });
+      const pageTitle = req.t('pageTitles.submitConfirm', { title: resolveFlowTitle(req, flow, title) });
 
       logAuditEvent(req, 'submit_confirmation_rendered', {
         fieldCount: fields.length,

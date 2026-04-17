@@ -7,7 +7,7 @@
 
         <section class="glass-panel standalone-state-card">
             <div>
-                <p class="glass-eyebrow">Dry Run</p>
+                <p class="glass-eyebrow"><%= t('submitPreview.badge') %></p>
                 <h1><%= t('submitPreview.title') %></h1>
                 <p class="standalone-state-card__intro"><%= t('submitPreview.intro') %></p>
             </div>
@@ -38,7 +38,7 @@
         </section>
 
         <section class="glass-panel standalone-card">
-            <p class="glass-eyebrow">Payload</p>
+            <p class="glass-eyebrow"><%= t('submitPreview.payloadEyebrow') %></p>
             <h2><%= t('submitPreview.payload') %></h2>
             <pre class="standalone-code-block"><%= encodedPayload %></pre>
             <div class="standalone-actions">

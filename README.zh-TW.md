@@ -244,7 +244,7 @@ README 只保留最常用配置；完整變數說明請查看 [`.dev.vars.exampl
 | `FORM_DRY_RUN` | `true` 時只預覽提交，不真正發往已配置的提交目標 |
 | `FORM_SUBMIT_TARGET` | `/form` 提交目標，可選 `google`、`d1`、`both`，預設 `both` |
 | `FORM_PROTECTION_SECRET` | 表單保護與密文解密的核心 secret；留空時會自動生成派生密鑰 |
-| `FORM_ID` / `FORM_ID_ENCRYPTED` | Google Form ID，二選一 |
+| `FORM_ID` / `FORM_ID_ENCRYPTED` | 主表單 Google Form ID，二選一；留空時回退到內建預設表單 |
 | `GOOGLE_SCRIPT_URL` / `GOOGLE_SCRIPT_URL_ENCRYPTED` | 私有 Apps Script 資料源，二選一 |
 | `PUBLIC_MAP_DATA_URL` | 公開地圖回退源，私有源慢或暫時不可用時會先頂上 |
 | `GOOGLE_CLOUD_TRANSLATION_API_KEY` | 啟用翻譯能力時必填 |
@@ -258,7 +258,7 @@ README 只保留最常用配置；完整變數說明請查看 [`.dev.vars.exampl
 - `FORM_ID` 與 `FORM_ID_ENCRYPTED` 只選一個。
 - `GOOGLE_SCRIPT_URL` 與 `GOOGLE_SCRIPT_URL_ENCRYPTED` 只選一個。
 - `FORM_SUBMIT_TARGET` 支援 `google`、`d1`、`both`，預設值為 `both`。
-- 如果 `FORM_SUBMIT_TARGET` 包含 `google`，仍需配置 `FORM_ID` 或 `FORM_ID_ENCRYPTED`。
+- 如果 `FORM_SUBMIT_TARGET` 包含 `google`，可配置 `FORM_ID` 或 `FORM_ID_ENCRYPTED` 覆蓋預設主表單；留空時會使用內建預設表單地址。
 - 如果 `FORM_SUBMIT_TARGET` 包含 `d1`，請確認 Workers 已連接 D1；若綁定名不是 `NCT_DB` 或 `DB`，再額外設定 `D1_BINDING_NAME`。
 - 如果使用 `FORM_ID_ENCRYPTED` 或 `GOOGLE_SCRIPT_URL_ENCRYPTED`，仍必須顯式配置 `FORM_PROTECTION_SECRET`。
 - Workers 正式部署時，敏感值請放到 Cloudflare `Variables and Secrets`，不要寫進倉庫或 `wrangler.jsonc`。

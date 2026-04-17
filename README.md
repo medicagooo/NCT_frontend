@@ -264,7 +264,7 @@ README 只保留最常用配置；完整变量说明请查看 [`.dev.vars.exampl
 | `FORM_SUBMIT_TARGET` | `/form` 提交目标，可选 `google`、`d1`、`both`，默认 `both` |
 | `CORRECTION_SUBMIT_TARGET` | `/map/correction` 与 `/correction` 的提交目标，可选 `google`、`d1`、`both`，默认 `d1` |
 | `FORM_PROTECTION_SECRET` | 表单保护与密文解密的核心 secret；留空时会自动生成派生密钥 |
-| `FORM_ID` / `FORM_ID_ENCRYPTED` | Google Form ID，二选一 |
+| `FORM_ID` / `FORM_ID_ENCRYPTED` | 主表单 Google Form ID，二选一；留空时回退到内置默认表单 |
 | `CORRECTION_FORM_ID` / `CORRECTION_GOOGLE_FORM_URL` | 机构补充 / 修正使用的 Google Form；可填 Form ID 或完整 URL，留空时会回退到内置默认表单 |
 | `GOOGLE_SCRIPT_URL` / `GOOGLE_SCRIPT_URL_ENCRYPTED` | 私有 Apps Script 数据源，二选一 |
 | `PUBLIC_MAP_DATA_URL` | 公开地图回退源，私有源慢或暂时不可用时会先顶上 |
@@ -280,7 +280,7 @@ README 只保留最常用配置；完整变量说明请查看 [`.dev.vars.exampl
 - `GOOGLE_SCRIPT_URL` 与 `GOOGLE_SCRIPT_URL_ENCRYPTED` 只选一个。
 - `FORM_SUBMIT_TARGET` 支持 `google`、`d1`、`both`，默认值为 `both`。
 - `CORRECTION_SUBMIT_TARGET` 支持 `google`、`d1`、`both`，默认值为 `d1`。
-- 如果 `FORM_SUBMIT_TARGET` 包含 `google`，仍需配置 `FORM_ID` 或 `FORM_ID_ENCRYPTED`。
+- 如果 `FORM_SUBMIT_TARGET` 包含 `google`，可以配置 `FORM_ID` 或 `FORM_ID_ENCRYPTED` 覆盖默认主表单；留空时会使用内置默认表单地址。
 - 如果 `CORRECTION_SUBMIT_TARGET` 包含 `google`，可配置 `CORRECTION_FORM_ID` 或 `CORRECTION_GOOGLE_FORM_URL`；留空时会使用内置默认表单地址。
 - 如果 `FORM_SUBMIT_TARGET` 包含 `d1`，请确保 Workers 已连接 D1；若绑定名不是 `NCT_DB` 或 `DB`，再额外设置 `D1_BINDING_NAME`。
 - 如果 `CORRECTION_SUBMIT_TARGET` 包含 `d1`，同样请确保 Workers 已连接 D1；若绑定名不是 `NCT_DB` 或 `DB`，再额外设置 `D1_BINDING_NAME`。

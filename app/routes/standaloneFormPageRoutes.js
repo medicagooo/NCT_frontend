@@ -53,6 +53,17 @@ function buildDebugSubmitErrorPreviewUrl({ googleFormUrl, t }) {
   return buildGoogleFormPrefillUrl(googleFormUrl, encodeGoogleFormFields(buildGoogleFormFields(values, t)));
 }
 
+function getStandaloneSurveyTitle(req, fallbackTitle = '') {
+  if (!req || typeof req.t !== 'function') {
+    return fallbackTitle;
+  }
+
+  const translatedTitle = req.t('form.standalone.title');
+  return translatedTitle && translatedTitle !== 'form.standalone.title'
+    ? translatedTitle
+    : fallbackTitle;
+}
+
 function createStandaloneFormPageRoutes({
   apiUrl,
   debugMod,
@@ -77,7 +88,8 @@ function createStandaloneFormPageRoutes({
   });
 
   function renderStandaloneFormPage(req, res) {
-    const pageTitle = req.t('pageTitles.form', { title });
+    const standaloneTitle = getStandaloneSurveyTitle(req, title);
+    const pageTitle = req.t('pageTitles.form', { title: standaloneTitle });
     const viewModel = buildFormPageViewModel({
       apiUrl,
       formProtectionSecret,
@@ -119,7 +131,7 @@ function createStandaloneFormPageRoutes({
         }
       ],
       pageRobots: sensitiveRobotsPolicy,
-      title: req.t('pageTitles.debug', { title })
+      title: req.t('pageTitles.debug', { title: getStandaloneSurveyTitle(req, title) })
     });
   });
 
@@ -155,7 +167,7 @@ function createStandaloneFormPageRoutes({
       pageRobots: sensitiveRobotsPolicy,
       showSubmissionDiagnostics: false,
       submissionDiagnostics: null,
-      title: req.t('pageTitles.submitError', { title })
+      title: req.t('pageTitles.submitError', { title: getStandaloneSurveyTitle(req, title) })
     });
   });
 

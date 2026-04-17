@@ -130,6 +130,71 @@ button {
     width: min(980px, calc(100% - 32px));
 }
 
+.standalone-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.standalone-language-picker {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.72rem 1rem 0.72rem 1.12rem;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background: rgba(255, 255, 255, 0.26);
+    backdrop-filter: blur(20px);
+    box-shadow: var(--glass-shadow-soft);
+}
+
+.standalone-language-picker__label {
+    color: var(--text-soft);
+    font-size: 0.9rem;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.standalone-language-picker__submit {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 3rem;
+    padding: 0.72rem 1.1rem;
+    border-radius: 999px;
+    border: 1px solid var(--glass-border);
+    background:
+        linear-gradient(135deg, rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0.16)),
+        var(--accent-soft);
+    color: var(--text);
+    box-shadow: var(--glass-shadow-soft);
+    transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.standalone-language-picker__submit:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 18px 32px rgba(63, 96, 148, 0.18);
+}
+
+.standalone-language-picker select {
+    width: auto;
+    min-width: 7.5rem;
+    padding: 0 1.8rem 0 0;
+    border: 0;
+    border-radius: 0;
+    background-color: transparent;
+    box-shadow: none;
+    cursor: pointer;
+}
+
+.standalone-language-picker select:focus {
+    background-color: transparent;
+    box-shadow: none;
+    transform: none;
+}
+
 .standalone-back-link {
     display: inline-flex;
     align-items: center;
@@ -732,6 +797,24 @@ pre.standalone-code-block {
     .standalone-back-link,
     .site-footer {
         border-radius: 24px;
+    }
+
+    .standalone-toolbar {
+        justify-content: stretch;
+        flex-wrap: wrap;
+    }
+
+    .standalone-language-picker {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    .standalone-language-picker select {
+        min-width: 0;
+    }
+
+    .standalone-language-picker__submit {
+        width: 100%;
     }
 
     .standalone-hero,

@@ -24,6 +24,7 @@ const messages = {
     common: {
       siteName: 'NO CONVERSION THERAPY',
       language: '语言',
+      switchLanguage: '切换',
       footerNavLabel: '页脚导航',
       languages: {
         'zh-CN': '简中',
@@ -197,6 +198,17 @@ const messages = {
         specifyOtherSex: '请选择 MtF / FtM / X / Queer，或选择输入框填写其它性别认同或补充说明',
         fillOtherSex: '请输入其它性别认同或补充说明',
         endDateBeforeStart: '离开日期不能早于首次被送入日期'
+      },
+      standalone: {
+        portalEyebrow: '独立表单',
+        title: '扭转机构受害者情况问卷调查',
+        footerMeta: '独立部署入口，仅用于安全提交问卷。',
+        honeypotLabel: '网站',
+        sectionEyebrows: {
+          basic: '基础信息',
+          experience: '经历',
+          exposure: '机构信息'
+        }
       }
     },
     institutionCorrection: {
@@ -459,8 +471,10 @@ const messages = {
       contactBody: '如果您对本站隐私说明、表单公开范围或内容处理方式有疑问，可以通过以下方式联系项目维护者：'
     },
     submitSuccess: {
+      badge: '成功',
       title: '提交成功！感谢你的参与。',
       message: '我们已经收到了你的表单，感谢你的参与。你的参与将是我们前进的动力！',
+      backForm: '返回问卷',
       backHome: '返回首页',
       petition: '抵制扭转机构签名会'
     },
@@ -478,6 +492,7 @@ const messages = {
       }
     },
     submitPreview: {
+      badge: '预览',
       title: '表单 Dry Run 预览',
       intro: '这次提交还没有发送到实际提交目标。下面是本次本地组装出的最终字段和值。',
       targetUrl: 'Google Form 目标网址（若已启用）：',
@@ -486,10 +501,12 @@ const messages = {
         field: '字段',
         value: '值'
       },
+      payloadEyebrow: '提交负载',
       payload: 'URL Encoded Payload',
       backForm: '返回表单'
     },
     submitConfirm: {
+      badge: '确认',
       title: '提交确认',
       intro: '这一步还没有发送到实际提交目标。请确认以下内容无误后，再正式提交。',
       targetUrl: '目标网址：',
@@ -503,6 +520,7 @@ const messages = {
       backForm: '返回表单'
     },
     submitError: {
+      badge: '重试',
       title: '提交失败',
       intro: '站内提交没有成功。如果下方提供了已预填内容的 Google Form 链接，你也可以继续在那里提交。',
       privacyNote: '注意：下面这个链接包含你刚刚填写的表单内容，请不要随意分享。',
@@ -684,6 +702,7 @@ const messages = {
     common: {
       siteName: 'NO CONVERSION THERAPY',
       language: '語言',
+      switchLanguage: '切換',
       footerNavLabel: '頁腳導航',
       languages: {
         'zh-CN': '簡中',
@@ -857,6 +876,17 @@ const messages = {
         specifyOtherSex: '請選擇 MtF / FtM / X / Queer，或選擇輸入框填寫其他性別認同或補充說明',
         fillOtherSex: '請輸入其他性別認同或補充說明',
         endDateBeforeStart: '離開日期不能早於首次被送入日期'
+      },
+      standalone: {
+        portalEyebrow: '獨立表單',
+        title: '扭轉機構受害者情況問卷調查',
+        footerMeta: '獨立部署入口，僅用於安全提交問卷。',
+        honeypotLabel: '網站',
+        sectionEyebrows: {
+          basic: '基礎資訊',
+          experience: '經歷',
+          exposure: '機構資訊'
+        }
       }
     },
     institutionCorrection: {
@@ -1119,8 +1149,10 @@ const messages = {
       contactBody: '如果您對本站隱私說明、表單公開範圍或內容處理方式有疑問，可以透過以下方式聯絡項目維護者：'
     },
     submitSuccess: {
+      badge: '成功',
       title: '提交成功！感謝您的參與。',
       message: '我們已經收到了您的表單，感謝您的參與。您的參與將是我們前進的動力！',
+      backForm: '返回問卷',
       backHome: '返回首頁',
       petition: '抵制扭轉機構簽名會'
     },
@@ -1138,6 +1170,7 @@ const messages = {
       }
     },
     submitPreview: {
+      badge: '預覽',
       title: '表單乾跑預覽',
       intro: '這次提交還沒有發送到實際提交目標。下面是本次本地組裝出的最終欄位和值。',
       targetUrl: 'Google Form 目標網址（若已啟用）：',
@@ -1146,10 +1179,12 @@ const messages = {
         field: '欄位',
         value: '值'
       },
+      payloadEyebrow: '提交負載',
       payload: 'URL Encoded Payload',
       backForm: '返回表單'
     },
     submitConfirm: {
+      badge: '確認',
       title: '提交確認',
       intro: '這一步還沒有發送到實際提交目標。請確認以下內容無誤後，再正式提交。',
       targetUrl: '目標網址：',
@@ -1163,6 +1198,7 @@ const messages = {
       backForm: '返回表單'
     },
     submitError: {
+      badge: '重試',
       title: '提交失敗',
       intro: '站內提交沒有成功。如果下方提供了已預填內容的 Google Form 連結，你也可以繼續在那裡提交。',
       privacyNote: '注意：下面這個連結包含你剛剛填寫的表單內容，請不要隨意分享。',
@@ -1344,6 +1380,7 @@ const messages = {
     common: {
       siteName: 'NO CONVERSION THERAPY',
       language: 'Language',
+      switchLanguage: 'Apply',
       footerNavLabel: 'Footer',
       languages: {
         'zh-CN': '简中',
@@ -1517,6 +1554,17 @@ const messages = {
         specifyOtherSex: 'Please choose MtF / FtM / X / Queer, or choose the text field and enter another gender identity or additional notes',
         fillOtherSex: 'Please enter another gender identity or additional notes',
         endDateBeforeStart: 'Departure date cannot be earlier than the first date sent there'
+      },
+      standalone: {
+        portalEyebrow: 'Standalone Form',
+        title: 'Survey on Harm Experienced in Conversion Institutions',
+        footerMeta: 'Standalone entry for secure survey submission.',
+        honeypotLabel: 'Website',
+        sectionEyebrows: {
+          basic: 'Basic',
+          experience: 'Experience',
+          exposure: 'Institution'
+        }
       }
     },
     institutionCorrection: {
@@ -1779,8 +1827,10 @@ const messages = {
       contactBody: 'If you have questions about this privacy notice, the public-display scope of form content, or how site content is handled, you can contact the project maintainer here:'
     },
     submitSuccess: {
+      badge: 'Success',
       title: 'Submission received. Thank you.',
       message: 'We have received your form. Thank you for taking part. Your contribution helps move this work forward.',
+      backForm: 'Back to Form',
       backHome: 'Back to Home',
       petition: 'Anti-Conversion Institution Petition'
     },
@@ -1798,6 +1848,7 @@ const messages = {
       }
     },
     submitPreview: {
+      badge: 'Dry Run',
       title: 'Dry Run Preview',
       intro: 'This submission has not been sent to the live submission target yet. Below is the final field set and value payload assembled locally.',
       targetUrl: 'Google Form Target URL (if enabled):',
@@ -1806,10 +1857,12 @@ const messages = {
         field: 'Field',
         value: 'Value'
       },
+      payloadEyebrow: 'Payload',
       payload: 'URL Encoded Payload',
       backForm: 'Back to Form'
     },
     submitConfirm: {
+      badge: 'Review',
       title: 'Confirm Submission',
       intro: 'This step has not sent anything to the live submission target yet. Please review the content below before confirming the final submission.',
       targetUrl: 'Target URL:',
@@ -1823,6 +1876,7 @@ const messages = {
       backForm: 'Back to Form'
     },
     submitError: {
+      badge: 'Retry',
       title: 'Submission Failed',
       intro: 'The in-site submission did not complete successfully. If a prefilled Google Form fallback link is available below, you can continue there.',
       privacyNote: 'Note: the link below contains the form content you just entered, so please do not share it casually.',

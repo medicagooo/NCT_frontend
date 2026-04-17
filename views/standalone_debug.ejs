@@ -3,7 +3,7 @@
 <%- include('partials/standalone_head') %>
 <body class="standalone-liquid-page">
     <main class="standalone-shell standalone-shell--narrow standalone-stack">
-        <a href="/" class="standalone-back-link">← <%= t('navigation.home') %></a>
+        <%- include('partials/standalone_language_picker') %>
 
         <section class="glass-panel standalone-card standalone-debug-hero">
             <p class="glass-eyebrow"><%= t('debug.title') %></p>

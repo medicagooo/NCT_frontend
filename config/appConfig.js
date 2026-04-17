@@ -224,15 +224,18 @@ const pageReadRateLimitMax = parsePositiveInteger(process.env.PAGE_READ_RATE_LIM
 const mapReadRateLimitMax = parsePositiveInteger(process.env.MAP_READ_RATE_LIMIT_MAX, 60);
 const submitRateLimitMax = parsePositiveInteger(process.env.SUBMIT_RATE_LIMIT_MAX, 5);
 const explicitFormProtectionSecret = readTrimmedEnvValue(process.env.FORM_PROTECTION_SECRET);
-const formId = resolveProtectedEnvValue({
+const configuredFormId = resolveProtectedEnvValue({
   envName: 'FORM_ID',
   encryptedEnvName: 'FORM_ID_ENCRYPTED',
   explicitSecret: explicitFormProtectionSecret,
   purpose: 'form-id'
 });
-const googleFormUrl = formId
-  ? `https://docs.google.com/forms/d/e/${formId}/formResponse`
-  : '';
+const googleFormConfig = buildGoogleFormUrlsFromConfig({
+  defaultFormId: '1FAIpQLScggjQgYutXQrjQDrutyxL0eLaFMktTMRKsFWPffQGavUFspA',
+  formId: configuredFormId
+});
+const formId = googleFormConfig.formId;
+const googleFormUrl = googleFormConfig.submitUrl;
 const correctionGoogleFormConfig = buildGoogleFormUrlsFromConfig({
   defaultFormId: '1FAIpQLSfiXdpt8CgOGZQhvsJTc1koQbvXFo6eWfnigQ329r1',
   defaultFormIdSuffix: '-3DniNA',

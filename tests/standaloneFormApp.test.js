@@ -128,6 +128,32 @@ test('standalone form debug page renders success and error preview links when de
   assert.match(response.body, /href="\/debug\/submit-error"/);
 });
 
+test('standalone pages respect explicit language selection for standalone-specific labels', async () => {
+  const app = loadStandaloneFormApp({ DEBUG_MOD: 'true' });
+  const englishFormResponse = await requestPath(app, '/form/standalone?lang=en');
+  const traditionalChineseFormResponse = await requestPath(app, '/form/standalone?lang=zh-TW');
+  const englishSuccessResponse = await requestPath(app, '/debug/submit-success?lang=en');
+  const traditionalChineseErrorResponse = await requestPath(app, '/debug/submit-error?lang=zh-TW');
+
+  assert.equal(englishFormResponse.statusCode, 200);
+  assert.match(englishFormResponse.body, /Survey on Harm Experienced in Conversion Institutions/);
+  assert.match(englishFormResponse.body, /<label for="website">Website<\/label>/);
+  assert.match(englishFormResponse.body, /data-standalone-language-select/);
+  assert.doesNotMatch(englishFormResponse.body, /class="standalone-back-link">← Back to Home<\/a>/);
+
+  assert.equal(traditionalChineseFormResponse.statusCode, 200);
+  assert.match(traditionalChineseFormResponse.body, /扭轉機構受害者情況問卷調查/);
+  assert.match(traditionalChineseFormResponse.body, /<label for="website">網站<\/label>/);
+
+  assert.equal(englishSuccessResponse.statusCode, 200);
+  assert.match(englishSuccessResponse.body, /<p class="glass-eyebrow">Success<\/p>/);
+  assert.match(englishSuccessResponse.body, /Back to Form/);
+  assert.doesNotMatch(englishSuccessResponse.body, />Back to Home<\/a>/);
+
+  assert.equal(traditionalChineseErrorResponse.statusCode, 200);
+  assert.match(traditionalChineseErrorResponse.body, /<p class="glass-eyebrow">重試<\/p>/);
+});
+
 test('standalone form debug preview routes render the standalone success and error pages', async () => {
   const app = loadStandaloneFormApp({ DEBUG_MOD: 'true' });
   const successResponse = await requestPath(app, '/debug/submit-success');

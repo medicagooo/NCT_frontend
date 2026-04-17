@@ -14,8 +14,11 @@
 1. 在当前目录复制 `.dev.vars.example` 为 `.dev.vars`
 2. 填入至少这些变量：
    - `FORM_PROTECTION_SECRET`
-   - `FORM_ID` 或 `FORM_ID_ENCRYPTED`
    - `PUBLIC_MAP_DATA_URL` 或 `GOOGLE_SCRIPT_URL`
+
+如果你想覆盖内置默认主表单，也可以额外填写：
+
+- `FORM_ID` 或 `FORM_ID_ENCRYPTED`
 3. 运行：
 
 ```bash
@@ -76,7 +79,7 @@ npm run deploy:workers:standalone-form
 - `FORM_DRY_RUN=false`
 - `FORM_SUBMIT_TARGET=google`
 - `FORM_PROTECTION_SECRET`：使用 Secret
-- `FORM_ID` 或 `FORM_ID_ENCRYPTED`
+- `FORM_ID` 或 `FORM_ID_ENCRYPTED`：可选；留空时会使用内置默认主表单
 - `SITE_URL=https://<your-worker>.<your-subdomain>.workers.dev`
 - `DEBUG_MOD=false`
 - `PUBLIC_MAP_DATA_URL` 或 `GOOGLE_SCRIPT_URL`

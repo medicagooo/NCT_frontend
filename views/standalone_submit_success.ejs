@@ -5,14 +5,13 @@
     <main class="standalone-shell standalone-shell--narrow standalone-stack">
         <section class="glass-panel standalone-state-card standalone-state-card--success">
             <div>
-                <p class="glass-eyebrow">Success</p>
+                <p class="glass-eyebrow"><%= t('submitSuccess.badge') %></p>
                 <h1><%= t('submitSuccess.title') %></h1>
                 <p class="standalone-state-card__intro"><%= t('submitSuccess.message') %></p>
             </div>
 
             <div class="standalone-actions">
-                <a href="/" class="button-primary"><%= t('submitSuccess.backHome') %></a>
-                <a href="<%= typeof backFormUrl !== 'undefined' && backFormUrl ? backFormUrl : '/form/standalone' %>"><%= t('submitError.backForm') %></a>
+                <a href="<%= typeof backFormUrl !== 'undefined' && backFormUrl ? backFormUrl : '/form/standalone' %>" class="button-primary"><%= t('submitSuccess.backForm') %></a>
             </div>
 
             <% if (showSubmissionDiagnostics && submissionDiagnostics) { %>

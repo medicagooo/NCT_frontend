@@ -114,7 +114,7 @@ test('app config rejects encrypted values when FORM_PROTECTION_SECRET is not exp
   );
 });
 
-test('app config no longer ships with a built-in default FORM_ID', () => {
+test('app config falls back to the built-in default main FORM_ID when none is configured', () => {
   const config = loadAppConfig({
     FORM_PROTECTION_SECRET: '',
     FORM_ID: '',
@@ -123,8 +123,11 @@ test('app config no longer ships with a built-in default FORM_ID', () => {
     GOOGLE_SCRIPT_URL_ENCRYPTED: ''
   });
 
-  assert.equal(config.formId, '');
-  assert.equal(config.googleFormUrl, '');
+  assert.equal(config.formId, '1FAIpQLScggjQgYutXQrjQDrutyxL0eLaFMktTMRKsFWPffQGavUFspA');
+  assert.match(
+    config.googleFormUrl,
+    /1FAIpQLScggjQgYutXQrjQDrutyxL0eLaFMktTMRKsFWPffQGavUFspA\/formResponse$/
+  );
   assert.equal(config.correctionSubmitTarget, 'd1');
   assert.match(
     config.correctionGoogleFormUrl,

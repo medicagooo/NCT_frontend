@@ -3,12 +3,12 @@
 <%- include('partials/standalone_head') %>
 <body class="standalone-liquid-page standalone-liquid-page--form">
     <main class="standalone-shell standalone-form-shell">
-        <a href="/" class="standalone-back-link">← <%= t('navigation.home') %></a>
+        <%- include('partials/standalone_language_picker') %>
 
         <section class="glass-panel standalone-hero">
             <div>
-                <p class="glass-eyebrow">Form Portal</p>
-                <h1><%= t('form.title') %></h1>
+                <p class="glass-eyebrow"><%= t('form.standalone.portalEyebrow') %></p>
+                <h1><%= t('form.standalone.title') %></h1>
                 <p class="standalone-hero__subtitle"><%= t('form.subtitle') %></p>
                 <p class="standalone-hero__note form-privacy-note"><%= t('form.privacyNotice') %></p>
             </div>
@@ -39,14 +39,14 @@
 
         <form action="<%= submitAction || '/submit' %>" method="POST" id="mainForm" class="report-form standalone-report-form">
             <div class="form-honeypot" aria-hidden="true">
-                <label for="website">Website</label>
+                <label for="website"><%= t('form.standalone.honeypotLabel') %></label>
                 <input type="text" name="website" id="website" tabindex="-1" autocomplete="off" spellcheck="false">
             </div>
             <input type="hidden" name="form_token" value="<%= formProtectionToken %>">
 
             <section class="glass-panel form-section">
                 <div class="section-heading">
-                    <p class="glass-eyebrow">Basic</p>
+                    <p class="glass-eyebrow"><%= t('form.standalone.sectionEyebrows.basic') %></p>
                     <h2><%= t('form.sections.basic') %></h2>
                 </div>
 
@@ -109,7 +109,7 @@
 
             <section class="glass-panel form-section">
                 <div class="section-heading">
-                    <p class="glass-eyebrow">Experience</p>
+                    <p class="glass-eyebrow"><%= t('form.standalone.sectionEyebrows.experience') %></p>
                     <h2 id="experienceSectionHeading"><%= t('form.sections.experience') %></h2>
                 </div>
 
@@ -136,7 +136,7 @@
 
             <section class="glass-panel form-section">
                 <div class="section-heading">
-                    <p class="glass-eyebrow">Exposure</p>
+                    <p class="glass-eyebrow"><%= t('form.standalone.sectionEyebrows.exposure') %></p>
                     <h2><%= t('form.sections.exposure') %></h2>
                 </div>
 
