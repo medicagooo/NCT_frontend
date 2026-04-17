@@ -43,6 +43,39 @@ function loadApp(envOverrides = {}) {
   return app;
 }
 
+function loadStandaloneFormApp(envOverrides = {}) {
+  const effectiveEnvOverrides = {
+    MAINTENANCE_MODE: 'false',
+    MAINTENANCE_NOTICE: '',
+    MAP_DATA_NODE_TRANSPORT_OVERRIDES: 'false',
+    FORM_ID: 'test-form-id',
+    FRONTEND_VARIANT: 'legacy',
+    ...envOverrides
+  };
+
+  const originalValues = Object.fromEntries(
+    Object.keys(effectiveEnvOverrides).map((key) => [key, process.env[key]])
+  );
+
+  Object.entries(effectiveEnvOverrides).forEach(([key, value]) => {
+    process.env[key] = value;
+  });
+
+  clearProjectModules();
+  const app = require(path.join(projectRoot, 'app/standaloneFormServer'));
+
+  Object.entries(originalValues).forEach(([key, value]) => {
+    if (typeof value === 'undefined') {
+      delete process.env[key];
+      return;
+    }
+
+    process.env[key] = value;
+  });
+
+  return app;
+}
+
 function loadAppWithPatchedFormService(envOverrides = {}, patchFormService) {
   const effectiveEnvOverrides = {
     MAINTENANCE_MODE: 'false',
@@ -149,11 +182,54 @@ function requestPath(app, requestPath) {
   });
 }
 
+function requestApp(app, { path: requestPath, method = 'GET', headers = {}, body } = {}) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(0, () => {
+      const { port } = server.address();
+      const request = http.request({
+        hostname: '127.0.0.1',
+        port,
+        method,
+        path: requestPath,
+        headers
+      }, (response) => {
+        let responseBody = '';
+
+        response.setEncoding('utf8');
+        response.on('data', (chunk) => {
+          responseBody += chunk;
+        });
+        response.on('end', () => {
+          server.close(() => {
+            resolve({
+              body: responseBody,
+              headers: response.headers,
+              statusCode: response.statusCode
+            });
+          });
+        });
+      });
+
+      request.on('error', (error) => {
+        server.close(() => reject(error));
+      });
+
+      if (typeof body === 'string') {
+        request.write(body);
+      }
+
+      request.end();
+    });
+  });
+}
+
 module.exports = {
   clearProjectModules,
   loadApp,
+  loadStandaloneFormApp,
   loadAppWithPatchedFormService,
   projectRoot,
+  requestApp,
   requestPath,
   startServer
 };

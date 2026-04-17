@@ -413,6 +413,58 @@ function buildProvinceDensityMap(provinceStatistics) {
   return densityMap;
 }
 
+function buildProvinceCodeLookup(provinceGeoJson) {
+  const provinceCodeLookup = new Map();
+
+  (Array.isArray(provinceGeoJson && provinceGeoJson.features) ? provinceGeoJson.features : []).forEach((feature) => {
+    const properties = feature && feature.properties || {};
+    const provinceCode = String(properties.code || '').trim();
+
+    if (!provinceCode) {
+      return;
+    }
+
+    [
+      provinceCode,
+      properties.name,
+      properties.fullname,
+      properties.pinyin,
+      properties.filename,
+      properties['name_zh-CN'],
+      properties['name_zh-TW'],
+      properties.name_en,
+      properties['fullname_zh-CN'],
+      properties['fullname_zh-TW'],
+      properties.fullname_en
+    ]
+      .map((value) => normalizeText(value))
+      .filter(Boolean)
+      .forEach((normalizedValue) => {
+        provinceCodeLookup.set(normalizedValue, provinceCode);
+      });
+  });
+
+  return provinceCodeLookup;
+}
+
+function resolveProvinceCode(value, provinceCodeLookup) {
+  const normalizedValue = normalizeText(value);
+
+  if (!normalizedValue) {
+    return '';
+  }
+
+  if (/^\d{6}$/.test(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  if (provinceCodeLookup && provinceCodeLookup.has(normalizedValue)) {
+    return provinceCodeLookup.get(normalizedValue);
+  }
+
+  return '';
+}
+
 function getProvinceCodeFromFeature(feature) {
   return String(feature && feature.properties && feature.properties.code || '').trim();
 }
@@ -1626,6 +1678,8 @@ function LeafletOverviewMap({
   const mapTileProviderIndexRef = useRef(0);
   const provinceLayerRef = useRef(null);
   const provinceFillLayerRef = useRef(null);
+  const provinceBorderRendererRef = useRef(null);
+  const provinceFillRendererRef = useRef(null);
   const markerAppearanceBySchoolKeyRef = useRef(new Map());
   const markersBySchoolKeyRef = useRef(new Map());
 
@@ -1664,6 +1718,14 @@ function LeafletOverviewMap({
     map.getPane('schoolMarkerPane').style.zIndex = '675';
     map.getPane('schoolTooltipPane').style.zIndex = '800';
     map.getPane('schoolTooltipPane').style.pointerEvents = 'none';
+
+    provinceFillRendererRef.current = L.canvas({
+      padding: 0.5,
+      pane: 'provinceFillPane'
+    });
+    provinceBorderRendererRef.current = L.svg({
+      pane: 'provinceBorderPane'
+    });
 
     mountMapTileLayer({
       map,
@@ -1709,6 +1771,8 @@ function LeafletOverviewMap({
       mapTileLayerRef.current = null;
       provinceLayerRef.current = null;
       provinceFillLayerRef.current = null;
+      provinceBorderRendererRef.current = null;
+      provinceFillRendererRef.current = null;
       markerAppearanceBySchoolKeyRef.current = new Map();
       markersBySchoolKeyRef.current = new Map();
     };
@@ -1788,12 +1852,25 @@ function LeafletOverviewMap({
           provinceLayerRef.current = null;
         }
 
-        const provinceDensityMap = buildProvinceDensityMap(groups);
+        const provinceCodeLookup = buildProvinceCodeLookup(provinceGeoJson);
+        const provinceDensityMap = buildProvinceDensityMap(
+          groups.map((group) => ({
+            ...group,
+            provinceCode: resolveProvinceCode(
+              group && group.summaryRecord && (
+                group.summaryRecord.provinceCode
+                || group.summaryRecord.province
+                || group.summaryRecord.prov
+              ),
+              provinceCodeLookup
+            )
+          }))
+        );
         const maxProvinceDensity = Math.max(0, ...provinceDensityMap.values(), 0);
 
         provinceFillLayerRef.current = L.geoJSON(provinceGeoJson, {
           interactive: false,
-          pane: 'provinceFillPane',
+          renderer: provinceFillRendererRef.current,
           style(feature) {
             const provinceCode = getProvinceCodeFromFeature(feature);
             const density = provinceDensityMap.get(provinceCode) || 0;
@@ -1813,7 +1890,7 @@ function LeafletOverviewMap({
           onEachFeature(feature, layer) {
             bindProvinceLabel(feature, layer, lang);
           },
-          pane: 'provinceBorderPane',
+          renderer: provinceBorderRendererRef.current,
           style() {
             return {
               color: getMapThemeColors().mapOutline,

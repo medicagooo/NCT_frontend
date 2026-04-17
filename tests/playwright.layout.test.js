@@ -119,6 +119,11 @@ function buildAuditPages() {
       readySelector: '.report-form'
     },
     {
+      pathName: '/form/standalone',
+      renderMode: 'legacy',
+      readySelector: '.standalone-report-form .form-section'
+    },
+    {
       pathName: '/blog',
       readySelector: '.blog-grid'
     },
@@ -254,6 +259,24 @@ async function waitForReactPage(page, readySelector) {
       ? document.fonts.ready.then(() => true)
       : true
   ));
+}
+
+async function waitForLegacyPage(page, readySelector) {
+  await page.waitForSelector(readySelector, { timeout: NAVIGATION_TIMEOUT_MS });
+  await page.evaluate(() => (
+    document.fonts && document.fonts.ready
+      ? document.fonts.ready.then(() => true)
+      : true
+  ));
+}
+
+async function waitForAuditPage(page, pageConfig) {
+  if (pageConfig.renderMode === 'legacy') {
+    await waitForLegacyPage(page, pageConfig.readySelector);
+    return;
+  }
+
+  await waitForReactPage(page, pageConfig.readySelector);
 }
 
 async function settlePage(page, pathName) {
@@ -473,7 +496,7 @@ test('react frontend key pages stay within viewport bounds', async (t) => {
                   assert.ok(response, `Expected navigation response for ${pageConfig.pathName}`);
                   assert.equal(response.status(), 200, `Expected ${pageConfig.pathName} to return HTTP 200`);
 
-                  await waitForReactPage(page, pageConfig.readySelector);
+                  await waitForAuditPage(page, pageConfig);
                   await disableAnimations(page);
                   await settlePage(page, pageConfig.pathName);
                   await assertMapHeight(page, pageConfig.pathName, viewport.name);
@@ -602,6 +625,147 @@ test('home easter egg swaps the brand mark after six title clicks', async () => 
       await page.waitForSelector('.brand-lockup__mark.is-easter-egg img[src="/media/easter-eggs/futarinomahou.png"]', {
         timeout: NAVIGATION_TIMEOUT_MS
       });
+    } finally {
+      await context.close();
+    }
+  } finally {
+    await browser.close();
+    await server.close();
+  }
+});
+
+test('map province fill still renders when records use province names instead of codes', async () => {
+  const app = loadApp({
+    DEBUG_MOD: 'true',
+    FRONTEND_VARIANT: 'react'
+  });
+  const server = await startServer(app);
+  const browser = await chromium.launch({
+    headless: true
+  });
+
+  try {
+    const context = await createContext(browser, server.baseUrl, VIEWPORTS[0], 'light');
+
+    await context.route(`${server.baseUrl}/api/map-data**`, async (route) => {
+      await route.fulfill({
+        body: JSON.stringify({
+          source: 'playwright-layout-province-names',
+          isSourceFallback: false,
+          preferredSource: 'google-script',
+          last_synced: 1775565960000,
+          avg_age: 17.4,
+          schoolNum: 6,
+          formNum: 6,
+          statistics: [],
+          statisticsForm: [],
+          data: [
+            {
+              name: '四川测试机构 A',
+              province: '四川',
+              prov: '成都',
+              addr: '成都市测试路 1 号',
+              inputType: '受害者本人',
+              lat: 30.67,
+              lng: 104.06
+            },
+            {
+              name: '四川测试机构 B',
+              province: '四川',
+              prov: '重庆',
+              addr: '重庆市测试路 2 号',
+              inputType: '受害者本人',
+              lat: 29.56,
+              lng: 106.55
+            },
+            {
+              name: '河北测试机构',
+              province: '河北',
+              prov: '石家庄',
+              addr: '石家庄市测试路 3 号',
+              inputType: '受害者本人',
+              lat: 38.04,
+              lng: 114.51
+            },
+            {
+              name: '广东测试机构 A',
+              province: '广东',
+              prov: '广州',
+              addr: '广州市测试路 4 号',
+              inputType: '受害者的代理人',
+              lat: 23.13,
+              lng: 113.26
+            },
+            {
+              name: '广东测试机构 B',
+              province: '广东',
+              prov: '深圳',
+              addr: '深圳市测试路 5 号',
+              inputType: '受害者的代理人',
+              lat: 22.54,
+              lng: 114.05
+            },
+            {
+              name: '北京测试机构',
+              province: '北京',
+              prov: '朝阳',
+              addr: '北京市测试路 6 号',
+              inputType: '受害者本人',
+              lat: 39.9,
+              lng: 116.4
+            }
+          ]
+        }),
+        contentType: 'application/json; charset=utf-8',
+        status: 200
+      });
+    });
+
+    const page = await context.newPage();
+    const diagnostics = attachPageDiagnostics(page, server.baseUrl);
+
+    try {
+      const response = await page.goto(`${server.baseUrl}/map?lang=zh-CN`, {
+        timeout: NAVIGATION_TIMEOUT_MS,
+        waitUntil: 'domcontentloaded'
+      });
+
+      assert.ok(response, 'Expected navigation response for province fill name mapping test');
+      assert.equal(response.status(), 200, 'Expected map page to return HTTP 200');
+
+      await waitForReactPage(page, '.records-list .map-record-card');
+      await disableAnimations(page);
+      await page.waitForTimeout(900);
+
+      const nonTransparentPixelCount = await page.evaluate(() => {
+        const fillCanvas = document.querySelector('.map-surface .leaflet-provinceFill-pane canvas');
+        if (!(fillCanvas instanceof HTMLCanvasElement)) {
+          return 0;
+        }
+
+        const context2d = fillCanvas.getContext('2d');
+        if (!context2d) {
+          return 0;
+        }
+
+        const imageData = context2d.getImageData(0, 0, fillCanvas.width, fillCanvas.height).data;
+        let count = 0;
+
+        for (let index = 0; index < imageData.length; index += 4) {
+          if (imageData[index + 3] > 0) {
+            count += 1;
+          }
+        }
+
+        return count;
+      });
+
+      assert.ok(
+        nonTransparentPixelCount > 8000,
+        `Expected visible province fill pixels when using province names, received ${nonTransparentPixelCount}`
+      );
+
+      diagnostics.assertClean('map province fill name mapping');
     } finally {
       await context.close();
     }

@@ -1,0 +1,29 @@
+# 独立表单 Workers 本地开发示例。
+# Cloudflare 官方文档说明：`.dev.vars` 需要和 wrangler 配置文件放在同一目录。
+# 复制为 `.dev.vars` 后再运行 `npm run dev` 或 `npx wrangler dev -c wrangler.jsonc`。
+
+RUNTIME_TARGET="workers"
+FRONTEND_VARIANT="legacy"
+
+# 建议先用 Dry Run 检查页面和提交流程。
+FORM_DRY_RUN="true"
+FORM_SUBMIT_TARGET="both"
+
+# 必填或强烈建议配置。
+FORM_PROTECTION_SECRET=""
+FORM_ID=""
+FORM_ID_ENCRYPTED=""
+
+# 自动补全与地图数据来源。
+GOOGLE_SCRIPT_URL=""
+GOOGLE_SCRIPT_URL_ENCRYPTED=""
+PUBLIC_MAP_DATA_URL="https://nct.hosinoeiji.workers.dev/api/map-data"
+
+# 可选站点信息。
+TITLE="N·C·T"
+SITE_URL="https://form.example.workers.dev"
+DEBUG_MOD="true"
+
+# 按需配置。
+RATE_LIMIT_REDIS_URL=""
+D1_BINDING_NAME=""

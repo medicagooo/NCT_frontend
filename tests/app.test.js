@@ -2011,6 +2011,216 @@ test('submit route accepts Queer selected for other gender identity in dry run m
   clearProjectModules();
 });
 
+test('standalone form page renders a lightweight liquid glass form shell', async () => {
+  const app = loadApp({ DEBUG_MOD: 'false' });
+  const response = await requestPath(app, '/form/standalone');
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /\/css\/standalone-form\.css/);
+  assert.match(response.body, /class="standalone-shell standalone-form-shell"/);
+  assert.match(response.body, /action="\/form\/standalone\/submit"/);
+  assert.match(response.body, /id="mainForm"/);
+});
+
+test('standalone submit route renders a dry run preview page when FORM_DRY_RUN=true', async () => {
+  clearProjectModules();
+  const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+  const app = loadApp({
+    DEBUG_MOD: 'false',
+    FORM_DRY_RUN: 'true',
+    FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+    FORM_PROTECTION_MIN_FILL_MS: '3000'
+  });
+  const response = await requestApp(app, {
+    path: '/form/standalone/submit',
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded'
+    },
+    body: buildValidSubmissionBody({
+      form_token: issueFormProtectionToken({
+        secret: 'test-form-protection-secret',
+        issuedAt: Date.now() - 5000
+      })
+    })
+  });
+
+  assert.equal(response.statusCode, 200);
+  assert.match(response.body, /表单 Dry Run 预览/);
+  assert.match(response.body, /href="\/form\/standalone"/);
+  assert.match(response.body, /standalone-code-block/);
+  clearProjectModules();
+});
+
+test('standalone submit route renders a confirmation page before sending in normal mode', { concurrency: false }, async () => {
+  clearProjectModules();
+  let submitCallCount = 0;
+
+  try {
+    const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+    const { app, restore } = loadAppWithPatchedFormService({
+      DEBUG_MOD: 'false',
+      FORM_DRY_RUN: 'false',
+      FORM_SUBMIT_TARGET: 'google',
+      FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+      FORM_PROTECTION_MIN_FILL_MS: '3000'
+    }, (formService) => {
+      const originalSubmitToGoogleForm = formService.submitToGoogleForm;
+      formService.submitToGoogleForm = async () => {
+        submitCallCount += 1;
+      };
+
+      return () => {
+        formService.submitToGoogleForm = originalSubmitToGoogleForm;
+      };
+    });
+    const response = await requestApp(app, {
+      path: '/form/standalone/submit',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: buildValidSubmissionBody({
+        form_token: issueFormProtectionToken({
+          secret: 'test-form-protection-secret',
+          issuedAt: Date.now() - 5000
+        })
+      })
+    });
+
+    assert.equal(response.statusCode, 200);
+    assert.equal(submitCallCount, 0);
+    assert.match(response.body, /提交确认/);
+    assert.match(response.body, /class="confirm-form"/);
+    assert.match(response.body, /action="\/form\/standalone\/submit\/confirm"/);
+    assert.match(response.body, /href="\/form\/standalone"/);
+    restore();
+  } finally {
+    clearProjectModules();
+  }
+});
+
+test('standalone submit confirm route renders the standalone success page after submission', { concurrency: false }, async () => {
+  clearProjectModules();
+  const capturedCalls = [];
+
+  try {
+    const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+    const { app, restore } = loadAppWithPatchedFormService({
+      DEBUG_MOD: 'false',
+      FORM_DRY_RUN: 'false',
+      FORM_SUBMIT_TARGET: 'google',
+      FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+      FORM_PROTECTION_MIN_FILL_MS: '3000'
+    }, (formService) => {
+      const originalSubmitToGoogleForm = formService.submitToGoogleForm;
+      formService.submitToGoogleForm = async (...args) => {
+        capturedCalls.push(args);
+      };
+
+      return () => {
+        formService.submitToGoogleForm = originalSubmitToGoogleForm;
+      };
+    });
+    const reviewResponse = await requestApp(app, {
+      path: '/form/standalone/submit',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: buildValidSubmissionBody({
+        form_token: issueFormProtectionToken({
+          secret: 'test-form-protection-secret',
+          issuedAt: Date.now() - 5000
+        })
+      })
+    });
+
+    const confirmationTokenMatch = responseBodyMatch(reviewResponse.body, /name="confirmation_token" value="([^"]+)"/);
+    const confirmationPayloadMatch = responseBodyMatch(reviewResponse.body, /<textarea name="confirmation_payload" hidden>([^<]*)<\/textarea>/);
+    const confirmResponse = await requestApp(app, {
+      path: '/form/standalone/submit/confirm',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        confirmation_token: confirmationTokenMatch[1],
+        confirmation_payload: confirmationPayloadMatch[1]
+      }).toString()
+    });
+
+    assert.equal(confirmResponse.statusCode, 200);
+    assert.equal(capturedCalls.length, 1);
+    assert.match(confirmResponse.body, /standalone-state-card--success/);
+    assert.match(confirmResponse.body, /提交成功/);
+    assert.match(confirmResponse.body, /href="\/form\/standalone"/);
+    restore();
+  } finally {
+    clearProjectModules();
+  }
+});
+
+test('standalone submit confirm route renders the standalone fallback page when submission fails', { concurrency: false }, async () => {
+  clearProjectModules();
+
+  try {
+    const { issueFormProtectionToken } = require(path.join(projectRoot, 'app/services/formProtectionService'));
+    const { app, restore } = loadAppWithPatchedFormService({
+      DEBUG_MOD: 'false',
+      FORM_DRY_RUN: 'false',
+      FORM_SUBMIT_TARGET: 'google',
+      FORM_PROTECTION_SECRET: 'test-form-protection-secret',
+      FORM_PROTECTION_MIN_FILL_MS: '3000'
+    }, (formService) => {
+      const originalSubmitToGoogleForm = formService.submitToGoogleForm;
+      formService.submitToGoogleForm = async () => {
+        throw new Error('google form unavailable');
+      };
+
+      return () => {
+        formService.submitToGoogleForm = originalSubmitToGoogleForm;
+      };
+    });
+    const reviewResponse = await requestApp(app, {
+      path: '/form/standalone/submit',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: buildValidSubmissionBody({
+        form_token: issueFormProtectionToken({
+          secret: 'test-form-protection-secret',
+          issuedAt: Date.now() - 5000
+        })
+      })
+    });
+
+    const confirmationTokenMatch = responseBodyMatch(reviewResponse.body, /name="confirmation_token" value="([^"]+)"/);
+    const confirmationPayloadMatch = responseBodyMatch(reviewResponse.body, /<textarea name="confirmation_payload" hidden>([^<]*)<\/textarea>/);
+    const confirmResponse = await requestApp(app, {
+      path: '/form/standalone/submit/confirm',
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({
+        confirmation_token: confirmationTokenMatch[1],
+        confirmation_payload: confirmationPayloadMatch[1]
+      }).toString()
+    });
+
+    assert.equal(confirmResponse.statusCode, 500);
+    assert.match(confirmResponse.body, /standalone-state-card--error/);
+    assert.match(confirmResponse.body, /打开 Google Form 继续提交|Open Google Form to Continue/);
+    assert.match(confirmResponse.body, /href="\/form\/standalone"/);
+    assert.match(confirmResponse.body, /viewform\?usp=pp_url&amp;entry\.842223433=/);
+    restore();
+  } finally {
+    clearProjectModules();
+  }
+});
+
 test('submit route renders a confirmation page before sending to Google Form in normal mode', { concurrency: false }, async () => {
   clearProjectModules();
   let submitCallCount = 0;

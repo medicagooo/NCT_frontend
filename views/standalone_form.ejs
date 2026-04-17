@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="<%= lang %>">
+<%- include('partials/standalone_head') %>
+<body class="standalone-liquid-page standalone-liquid-page--form">
+    <main class="standalone-shell standalone-form-shell">
+        <a href="/" class="standalone-back-link">← <%= t('navigation.home') %></a>
+
+        <section class="glass-panel standalone-hero">
+            <div>
+                <p class="glass-eyebrow">Form Portal</p>
+                <h1><%= t('form.title') %></h1>
+                <p class="standalone-hero__subtitle"><%= t('form.subtitle') %></p>
+                <p class="standalone-hero__note form-privacy-note"><%= t('form.privacyNotice') %></p>
+            </div>
+
+            <div class="standalone-hero__meta" aria-hidden="true">
+                <div class="standalone-hero__chip">
+                    <span>01</span>
+                    <strong><%= t('form.sections.basic') %></strong>
+                    <p><%= t('form.fields.identity') %></p>
+                </div>
+                <div class="standalone-hero__chip">
+                    <span>02</span>
+                    <strong><%= t('form.sections.experience') %></strong>
+                    <p><%= t('form.fields.dateStart') %></p>
+                </div>
+                <div class="standalone-hero__chip">
+                    <span>03</span>
+                    <strong><%= t('form.sections.exposure') %></strong>
+                    <p><%= t('form.fields.schoolName') %></p>
+                </div>
+                <div class="standalone-hero__chip">
+                    <span>04</span>
+                    <strong><%= t('form.buttons.submit') %></strong>
+                    <p><%= t('submitConfirm.intro') %></p>
+                </div>
+            </div>
+        </section>
+
+        <form action="<%= submitAction || '/submit' %>" method="POST" id="mainForm" class="report-form standalone-report-form">
+            <div class="form-honeypot" aria-hidden="true">
+                <label for="website">Website</label>
+                <input type="text" name="website" id="website" tabindex="-1" autocomplete="off" spellcheck="false">
+            </div>
+            <input type="hidden" name="form_token" value="<%= formProtectionToken %>">
+
+            <section class="glass-panel form-section">
+                <div class="section-heading">
+                    <p class="glass-eyebrow">Basic</p>
+                    <h2><%= t('form.sections.basic') %></h2>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                    <div class="form-group form-field--full">
+                        <label class="required"><%= t('form.fields.identity') %></label>
+                        <select name="identity" id="identitySelect" required>
+                            <% identityOptions.forEach((option) => { %>
+                                <option value="<%= option.value %>"><%= option.label %></option>
+                            <% }) %>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="required" id="birthFieldLabel" for="birthYearSelect"><%= t('form.fields.birthYear') %></label>
+                        <div class="birth-date-group birth-date-group--single" id="birthYearSelectWrap" role="group" aria-labelledby="birthFieldLabel">
+                            <select name="birth_year" id="birthYearSelect" required>
+                                <option value="" selected><%= t('form.placeholders.birthYear') %></option>
+                                <% for (let year = formRules.birthYear.max; year >= formRules.birthYear.min; year -= 1) { %>
+                                    <option value="<%= year %>"><%= year %></option>
+                                <% } %>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="required" id="sexLabel" for="sexSelect"><%= t('form.fields.sex') %></label>
+                        <select name="sex" id="sexSelect" required>
+                            <option value="" disabled selected><%= t('form.sexOptions.placeholder') %></option>
+                            <% sexOptions.forEach((option) => { %>
+                                <option value="<%= option.value %>"><%= option.label %></option>
+                            <% }) %>
+                        </select>
+                        <div id="otherSexFields" class="form-conditional-fields" hidden>
+                            <div class="other-sex-options" role="radiogroup" aria-label="<%= t('fields.sexOther') %>">
+                                <% otherSexTypeOptions.forEach((option) => { %>
+                                    <label class="other-sex-option">
+                                        <input type="radio" name="sex_other_type" value="<%= option.value %>" class="other-sex-radio" disabled>
+                                        <span><%= option.label %></span>
+                                    </label>
+                                <% }) %>
+                                <label class="other-sex-option other-sex-option--custom">
+                                    <input type="radio" id="otherSexCustomRadio" name="sex_other_type" value="__custom_other_sex__" class="other-sex-radio" disabled>
+                                    <input
+                                        type="text"
+                                        id="otherSexInput"
+                                        name="sex_other"
+                                        class="other-input other-input--choice"
+                                        placeholder="<%= t('form.placeholders.otherSex') %>"
+                                        aria-label="<%= t('fields.sexOther') %>"
+                                        maxlength="<%= formRules.sexOther.maxLength %>"
+                                        disabled
+                                    >
+                                </label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-panel form-section">
+                <div class="section-heading">
+                    <p class="glass-eyebrow">Experience</p>
+                    <h2 id="experienceSectionHeading"><%= t('form.sections.experience') %></h2>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                    <div class="form-group">
+                        <label class="required" for="date_start"><%= t('form.fields.dateStart') %></label>
+                        <input type="date" name="date_start" id="date_start" required>
+                        <div class="hint"><%= t('form.hints.dateStart') %></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="date_end"><%= t('form.fields.dateEnd') %></label>
+                        <input type="date" name="date_end" id="date_end">
+                        <div class="hint"><%= t('form.hints.dateEnd') %></div>
+                    </div>
+
+                    <div class="form-group form-field--full">
+                        <label for="experienceInput"><%= t('form.fields.experience') %></label>
+                        <textarea name="experience" id="experienceInput" rows="4" placeholder="<%= t('form.placeholders.experience') %>" maxlength="<%= formRules.experience.maxLength %>"></textarea>
+                        <div class="hint"><%= t('form.hints.experience') %></div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="glass-panel form-section">
+                <div class="section-heading">
+                    <p class="glass-eyebrow">Exposure</p>
+                    <h2><%= t('form.sections.exposure') %></h2>
+                </div>
+
+                <div class="form-grid form-grid--two">
+                    <div class="form-group form-field--full">
+                        <label class="required" for="school_input"><%= t('form.fields.schoolName') %></label>
+                        <div class="autocomplete-field">
+                            <input type="text" name="school_name" id="school_input" placeholder="<%= t('form.placeholders.schoolName') %>" maxlength="<%= formRules.schoolName.maxLength %>" autocomplete="off" required>
+                            <div id="school_results_list" class="autocomplete-results" hidden></div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="required" for="provinceSelect"><%= t('form.fields.province') %></label>
+                        <select name="provinceCode" id="provinceSelect" required>
+                            <option value="" selected><%= t('form.placeholders.province') %></option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="required" for="citySelect"><%= t('form.fields.city') %></label>
+                        <select name="cityCode" id="citySelect" required disabled>
+                            <option value="" selected><%= t('form.placeholders.city') %></option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="countySelect"><%= t('form.fields.county') %></label>
+                        <select name="countyCode" id="countySelect" disabled>
+                            <option value="" selected><%= t('form.placeholders.countyInitial') %></option>
+                        </select>
+                    </div>
+
+                    <div class="form-group form-field--full">
+                        <label for="addr"><%= t('form.fields.schoolAddress') %></label>
+                        <div class="autocomplete-field">
+                            <input type="text" name="school_address" placeholder="<%= t('form.placeholders.schoolAddress') %>" id="addr" maxlength="<%= formRules.schoolAddress.maxLength %>" autocomplete="off">
+                            <div id="address_results_list" class="autocomplete-results" hidden></div>
+                        </div>
+                        <div class="form-location-actions">
+                            <button id="openMapButton" class="form-location-action" type="button"><%= t('form.buttons.openMap') %></button>
+                            <button id="getCurrentLocationButton" class="form-location-action" type="button"><%= t('form.buttons.getCurrentLocation') %></button>
+                        </div>
+                        <div id="locationStatus" class="hint form-location-status" role="status" aria-live="polite" aria-atomic="true"></div>
+                        <div id="map" class="standalone-map" style="display: none;"></div>
+                    </div>
+
+                    <div class="form-group">
+                        <label class="required" for="contactInformationInput"><%= t('form.fields.contactInformation') %></label>
+                        <input type="text" id="contactInformationInput" name="contact_information" placeholder="<%= t('form.placeholders.contactInformation') %>" maxlength="<%= formRules.contactInformation.maxLength %>" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="headmaster_name"><%= t('form.fields.headmasterName') %></label>
+                        <input type="text" id="headmaster_name" name="headmaster_name" placeholder="<%= t('form.placeholders.headmasterName') %>" maxlength="<%= formRules.headmasterName.maxLength %>">
+                    </div>
+
+                    <div class="form-group form-field--full">
+                        <label for="scandal"><%= t('form.fields.scandal') %></label>
+                        <textarea name="scandal" id="scandal" rows="3" placeholder="<%= t('form.placeholders.scandal') %>" maxlength="<%= formRules.scandal.maxLength %>"></textarea>
+                    </div>
+
+                    <div class="form-group form-field--full">
+                        <label for="other"><%= t('form.fields.other') %></label>
+                        <input type="text" id="other" name="other" placeholder="<%= t('form.placeholders.other') %>" maxlength="<%= formRules.other.maxLength %>">
+                    </div>
+                </div>
+            </section>
+
+            <div class="standalone-submit-row">
+                <button type="submit" class="standalone-submit-button"><%= t('form.buttons.submit') %></button>
+            </div>
+        </form>
+
+        <%- include('partials/standalone_foot') %>
+    </main>
+
+    <script src="/js/map_data_store.js"></script>
+    <script src="/js/form_api.js"></script>
+    <script>
+        window.AREA_SELECTOR_DATA = <%- JSON.stringify(areaOptions) %>;
+        window.FORM_RULES = <%- JSON.stringify(formRules) %>;
+    </script>
+    <script src="/js/form_areaSelect.js"></script>
+    <script src="/js/standalone_form.js"></script>
+    <script src="/js/form_mapChoose.js"></script>
+</body>
+</html>

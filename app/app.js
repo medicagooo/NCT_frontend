@@ -43,6 +43,7 @@ const createApiRoutes = require('./routes/apiRoutes');
 const createFormRoutes = require('./routes/formRoutes');
 const createInstitutionCorrectionRoutes = require('./routes/institutionCorrectionRoutes');
 const createPageRoutes = require('./routes/pageRoutes');
+const { primeEjsTemplateCache } = require('./services/templateCache');
 const configuredAssetVersion = String(process.env.ASSET_VERSION || '').trim();
 const assetVersion = configuredAssetVersion && configuredAssetVersion !== '0'
   ? configuredAssetVersion
@@ -55,34 +56,6 @@ const activeFrontendVariant = frontendVariant === 'react' && reactFrontendBuilt
   : 'legacy';
 // GeoJSON 在 Node / Workers 两侧都会频繁读取，启动时预读可以避免每次请求重复走磁盘。
 const chinaGeoJsonPayload = fs.readFileSync(nodePath.join(paths.public, 'cn.json'), 'utf8');
-
-function collectEjsTemplatePaths(directory) {
-  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const absolutePath = nodePath.join(directory, entry.name);
-
-    if (entry.isDirectory()) {
-      return collectEjsTemplatePaths(absolutePath);
-    }
-
-    return absolutePath.endsWith('.ejs') ? [absolutePath] : [];
-  });
-}
-
-function primeEjsTemplateCache(viewsDirectory) {
-  const templatePaths = collectEjsTemplatePaths(viewsDirectory);
-
-  // EJS 模板在启动阶段预编译并写入缓存，减轻首个请求的模板解析开销。
-  for (const templatePath of templatePaths) {
-    const templateSource = fs.readFileSync(templatePath, 'utf8');
-    const compiledTemplate = ejs.compile(templateSource, {
-      cache: true,
-      filename: templatePath,
-      views: [viewsDirectory]
-    });
-
-    ejs.cache.set(templatePath, compiledTemplate);
-  }
-}
 
 // 统一装配 Express 应用：中间件、模板引擎和路由都从这里接入。
 const app = express();

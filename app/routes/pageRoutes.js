@@ -11,6 +11,7 @@ const {
   getLocalizedSexOptions
 } = require('../../config/formConfig');
 const { renderBlogArticleHtml, translateBlogListEntries } = require('../services/blogTranslationService');
+const { buildFormPageViewModel } = require('../services/formPageViewModel');
 const { issueFormProtectionToken } = require('../services/formProtectionService');
 const { generateRobotsTxt } = require('../services/robotsService');
 const { generateSitemapXml } = require('../services/sitemapService');
@@ -643,20 +644,13 @@ function createPageRoutes({
 
   // 表單頁：把地区联动数据和前端校验规则一并下发到模板。
   router.get('/form', pageReadLimiter, async (req, res) => {
-    const t = req.t;
-    const { provinces } = getAreaOptions(req.lang);
-    const pageTitle = t('pageTitles.form', { title });
-    const legacyData = {
-      title: pageTitle,
+    const pageTitle = req.t('pageTitles.form', { title });
+    const legacyData = buildFormPageViewModel({
       apiUrl,
-      areaOptions: { provinces },
-      formProtectionToken: issueFormProtectionToken({ secret: formProtectionSecret }),
-      formRules: getLocalizedFormRules(t),
-      identityOptions: getLocalizedIdentityOptions(t),
-      otherSexTypeOptions: getLocalizedOtherSexTypeOptions(t),
-      pageRobots: sensitiveRobotsPolicy,
-      sexOptions: getLocalizedSexOptions(t)
-    };
+      formProtectionSecret,
+      req,
+      title: pageTitle
+    });
 
     applySensitivePageHeaders(res);
 
@@ -681,6 +675,23 @@ function createPageRoutes({
     }
 
     return res.render('form', legacyData);
+  });
+
+  router.get('/form/standalone', pageReadLimiter, (req, res) => {
+    const pageTitle = req.t('pageTitles.form', { title });
+    const legacyData = buildFormPageViewModel({
+      apiUrl,
+      formProtectionSecret,
+      req,
+      title: pageTitle
+    });
+
+    applySensitivePageHeaders(res);
+
+    return res.render('standalone_form', {
+      ...legacyData,
+      submitAction: '/form/standalone/submit'
+    });
   });
 
   router.get(['/map/correction', '/correction'], pageReadLimiter, (req, res) => {

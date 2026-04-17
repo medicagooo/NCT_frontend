@@ -55,6 +55,38 @@ function decodeConfirmationPayload(payload) {
   };
 }
 
+function renderFormFlowPage({
+  flow,
+  legacyData = {},
+  legacyView,
+  pageProps = {},
+  pageRobots,
+  pageType,
+  req,
+  res,
+  title
+}) {
+  const resolvedTitle = title || legacyData.title || req.t('common.siteName');
+
+  if (flow.renderMode === 'legacy') {
+    return res.render(legacyView, {
+      ...legacyData,
+      title: resolvedTitle
+    });
+  }
+
+  return renderFrontendPage({
+    legacyData,
+    legacyView,
+    pageProps,
+    pageRobots,
+    pageType,
+    req,
+    res,
+    title: resolvedTitle
+  });
+}
+
 async function submitToConfiguredTargets({
   encodedPayload,
   formSubmitTarget,
@@ -108,8 +140,18 @@ async function submitToConfiguredTargets({
   };
 }
 
+function buildFailedResultsByTarget(formSubmitTarget, errorMessage) {
+  return Object.fromEntries(
+    getSubmitTargets(formSubmitTarget).map((target) => [target, {
+      ok: false,
+      error: errorMessage
+    }])
+  );
+}
+
 function renderSubmitFailurePage({
   encodedPayload,
+  flow,
   formSubmitTarget,
   googleFormUrl,
   req,
@@ -125,32 +167,380 @@ function renderSubmitFailurePage({
 
   res.status(500);
 
-  return renderFrontendPage({
+  return renderFormFlowPage({
+    flow,
     legacyData: {
+      backFormUrl: flow.backFormUrl,
       fallbackUrl,
       pageRobots: sensitiveRobotsPolicy,
       showSubmissionDiagnostics,
       submissionDiagnostics,
       title: pageTitle
     },
-    legacyView: 'submit_error',
+    legacyView: flow.views.error,
     pageProps: {
-      backFormUrl: '/form',
+      backFormUrl: flow.backFormUrl,
       fallbackUrl,
       showSubmissionDiagnostics,
       submissionDiagnostics
     },
     pageRobots: sensitiveRobotsPolicy,
-    pageType: 'submit-error',
+    pageType: flow.pageTypes.error,
     req,
     res,
     title: pageTitle
   });
 }
 
+function buildFormFlowConfigs() {
+  return {
+    default: {
+      backFormUrl: '/form',
+      confirmPath: '/submit/confirm',
+      pageTypes: {
+        confirm: 'submit-confirm',
+        error: 'submit-error',
+        preview: 'submit-preview',
+        success: 'submit-success'
+      },
+      renderMode: 'frontend',
+      submitPath: '/submit',
+      views: {
+        confirm: 'submit_confirm',
+        error: 'submit_error',
+        preview: 'submit_preview',
+        success: 'submit'
+      }
+    },
+    standalone: {
+      backFormUrl: '/form/standalone',
+      confirmPath: '/form/standalone/submit/confirm',
+      pageTypes: {
+        confirm: 'submit-confirm',
+        error: 'submit-error',
+        preview: 'submit-preview',
+        success: 'submit-success'
+      },
+      renderMode: 'legacy',
+      submitPath: '/form/standalone/submit',
+      views: {
+        confirm: 'standalone_submit_confirm',
+        error: 'standalone_submit_error',
+        preview: 'standalone_submit_preview',
+        success: 'standalone_submit_success'
+      }
+    },
+    workerStandalone: {
+      backFormUrl: '/',
+      confirmPath: '/submit/confirm',
+      pageTypes: {
+        confirm: 'submit-confirm',
+        error: 'submit-error',
+        preview: 'submit-preview',
+        success: 'submit-success'
+      },
+      renderMode: 'legacy',
+      submitPath: '/submit',
+      views: {
+        confirm: 'standalone_submit_confirm',
+        error: 'standalone_submit_error',
+        preview: 'standalone_submit_preview',
+        success: 'standalone_submit_success'
+      }
+    }
+  };
+}
+
+function registerSubmissionFlowRoutes({
+  confirmLimiter,
+  flow,
+  formDryRun,
+  formProtectionMaxAgeMs,
+  formProtectionMinFillMs,
+  formProtectionSecret,
+  formSubmitTarget,
+  googleFormUrl,
+  router,
+  showSubmissionDiagnostics,
+  submitLimiter,
+  title
+}) {
+  router.post(flow.submitPath, submitLimiter, async (req, res) => {
+    applySensitivePageHeaders(res);
+
+    // 每次进入提交路由都先记录一条审计日志，便于后续排查来源 IP 和路径。
+    logAuditEvent(req, 'submit_received', {
+      dryRun: formDryRun,
+      flow: flow.submitPath
+    });
+
+    const protectionResult = validateFormProtection({
+      token: req.body.form_token,
+      honeypotValue: req.body.website,
+      secret: formProtectionSecret,
+      minFillMs: formProtectionMinFillMs,
+      maxAgeMs: formProtectionMaxAgeMs
+    });
+
+    if (!protectionResult.ok) {
+      logAuditEvent(req, 'submit_protection_failed', {
+        ageMs: protectionResult.ageMs,
+        flow: flow.submitPath,
+        reason: protectionResult.reason,
+        status: 400
+      });
+      return res.status(400).send(req.t('server.invalidFormSubmission'));
+    }
+
+    let encodedPayload = '';
+
+    try {
+      // 先把请求体校验并规范化成 Google Form 需要的值。
+      const { errors, values } = validateSubmission(req.body, req.t);
+      if (errors.length > 0) {
+        logAuditEvent(req, 'submit_validation_failed', {
+          errorCount: errors.length,
+          flow: flow.submitPath,
+          status: 400
+        });
+        return res.status(400).send(`${req.t('server.submitFailedPrefix')}${errors.join('；')}`);
+      }
+
+      const fields = buildGoogleFormFields(values, req.t);
+      const confirmationFields = buildConfirmationFields(values, req.t);
+      encodedPayload = encodeGoogleFormFields(fields);
+
+      // 干跑模式下直接渲染预览页，不真正请求 Google。
+      if (formDryRun) {
+        const pageTitle = req.t('pageTitles.submitPreview', { title });
+
+        logAuditEvent(req, 'submit_preview_rendered', {
+          fieldCount: fields.length,
+          flow: flow.submitPath,
+          status: 200
+        });
+
+        return renderFormFlowPage({
+          flow,
+          legacyData: {
+            backFormUrl: flow.backFormUrl,
+            encodedPayload,
+            fields,
+            googleFormUrl: redactGoogleFormUrl(googleFormUrl),
+            pageRobots: sensitiveRobotsPolicy,
+            title: pageTitle
+          },
+          legacyView: flow.views.preview,
+          pageProps: {
+            backFormUrl: flow.backFormUrl,
+            encodedPayload,
+            fields,
+            googleFormUrl: redactGoogleFormUrl(googleFormUrl)
+          },
+          pageRobots: sensitiveRobotsPolicy,
+          pageType: flow.pageTypes.preview,
+          req,
+          res,
+          title: pageTitle
+        });
+      }
+
+      const confirmationPayload = encodeConfirmationPayload({
+        encodedPayload,
+        submissionValues: values
+      });
+      // 生产模式下强制多一步确认，给用户最后一次核对机会，也阻止客户端改包直接提交。
+      const confirmationToken = issueFormConfirmationToken({
+        payload: confirmationPayload,
+        secret: formProtectionSecret
+      });
+      const pageTitle = req.t('pageTitles.submitConfirm', { title });
+
+      logAuditEvent(req, 'submit_confirmation_rendered', {
+        fieldCount: fields.length,
+        flow: flow.submitPath,
+        status: 200
+      });
+
+      return renderFormFlowPage({
+        flow,
+        legacyData: {
+          backFormUrl: flow.backFormUrl,
+          confirmationPayload,
+          confirmationToken,
+          confirmAction: flow.confirmPath,
+          fields: confirmationFields,
+          pageRobots: sensitiveRobotsPolicy,
+          title: pageTitle
+        },
+        legacyView: flow.views.confirm,
+        pageProps: {
+          backFormUrl: flow.backFormUrl,
+          confirmationPayload,
+          confirmationToken,
+          confirmAction: flow.confirmPath,
+          fields: confirmationFields
+        },
+        pageRobots: sensitiveRobotsPolicy,
+        pageType: flow.pageTypes.confirm,
+        req,
+        res,
+        title: pageTitle
+      });
+    } catch (error) {
+      logAuditEvent(req, 'submit_failed', {
+        error: error.message,
+        flow: flow.submitPath,
+        status: 500
+      });
+      // 详细错误保留在服务端日志里，对外仍返回统一失败文案。
+      console.error('Submission Error:', error.response ? error.response.data : error.message);
+      return renderSubmitFailurePage({
+        encodedPayload,
+        flow,
+        formSubmitTarget,
+        googleFormUrl,
+        req,
+        res,
+        showSubmissionDiagnostics,
+        submissionDiagnostics: buildSubmissionDiagnostics({
+          req,
+          resultsByTarget: buildFailedResultsByTarget(formSubmitTarget, error.message),
+          successfulTargets: []
+        }),
+        title
+      });
+    }
+  });
+
+  router.post(flow.confirmPath, confirmLimiter, async (req, res) => {
+    applySensitivePageHeaders(res);
+
+    logAuditEvent(req, 'submit_confirm_received', {
+      dryRun: formDryRun,
+      flow: flow.confirmPath
+    });
+
+    const confirmationPayload = String(req.body.confirmation_payload || '').trim();
+    const confirmationToken = String(req.body.confirmation_token || '').trim();
+    const confirmationResult = validateFormConfirmation({
+      token: confirmationToken,
+      payload: confirmationPayload,
+      secret: formProtectionSecret,
+      maxAgeMs: formProtectionMaxAgeMs
+    });
+
+    if (!confirmationResult.ok) {
+      logAuditEvent(req, 'submit_confirm_validation_failed', {
+        ageMs: confirmationResult.ageMs,
+        flow: flow.confirmPath,
+        reason: confirmationResult.reason,
+        status: 400
+      });
+      return res.status(400).send(req.t('server.invalidFormSubmission'));
+    }
+
+    let encodedPayload = '';
+    let submissionValues = null;
+
+    try {
+      const decodedConfirmationPayload = decodeConfirmationPayload(confirmationPayload);
+      encodedPayload = decodedConfirmationPayload.encodedPayload;
+      submissionValues = decodedConfirmationPayload.submissionValues;
+
+      const submissionResult = await submitToConfiguredTargets({
+        encodedPayload,
+        formSubmitTarget,
+        googleFormUrl,
+        req,
+        submissionValues
+      });
+      const submissionDiagnostics = buildSubmissionDiagnostics({
+        req,
+        resultsByTarget: submissionResult.resultsByTarget,
+        successfulTargets: submissionResult.successfulTargets
+      });
+
+      if (submissionResult.successfulTargets.length === 0) {
+        logAuditEvent(req, 'submit_failed', {
+          failedTargets: submissionDiagnostics.failedTargets.map((target) => target.id),
+          flow: flow.confirmPath,
+          status: 500
+        });
+        return renderSubmitFailurePage({
+          encodedPayload,
+          flow,
+          formSubmitTarget,
+          googleFormUrl,
+          req,
+          res,
+          showSubmissionDiagnostics,
+          submissionDiagnostics,
+          title
+        });
+      }
+
+      logAuditEvent(req, 'submit_succeeded', {
+        failedTargets: submissionDiagnostics.failedTargets.map((target) => target.id),
+        flow: flow.confirmPath,
+        status: 200,
+        successfulTargets: submissionDiagnostics.successfulTargets.map((target) => target.id)
+      });
+      const successPageTitle = flow.renderMode === 'legacy'
+        ? req.t('submitSuccess.title')
+        : title;
+
+      return renderFormFlowPage({
+        flow,
+        legacyData: {
+          backFormUrl: flow.backFormUrl,
+          pageRobots: sensitiveRobotsPolicy,
+          showSubmissionDiagnostics,
+          submissionDiagnostics,
+          title: successPageTitle
+        },
+        legacyView: flow.views.success,
+        pageProps: {
+          backFormUrl: flow.backFormUrl,
+          showSubmissionDiagnostics,
+          submissionDiagnostics
+        },
+        pageRobots: sensitiveRobotsPolicy,
+        pageType: flow.pageTypes.success,
+        req,
+        res,
+        title: successPageTitle
+      });
+    } catch (error) {
+      logAuditEvent(req, 'submit_failed', {
+        error: error.message,
+        flow: flow.confirmPath,
+        status: 500
+      });
+      console.error('Submission Error:', error.response ? error.response.data : error.message);
+      return renderSubmitFailurePage({
+        encodedPayload,
+        flow,
+        formSubmitTarget,
+        googleFormUrl,
+        req,
+        res,
+        showSubmissionDiagnostics,
+        submissionDiagnostics: buildSubmissionDiagnostics({
+          req,
+          resultsByTarget: buildFailedResultsByTarget(formSubmitTarget, error.message),
+          successfulTargets: []
+        }),
+        title
+      });
+    }
+  });
+}
+
 // 表單提交流程：限流 -> 校验 -> 干跑预览或确认页 -> 最终提交 -> 审计日志。
 function createFormRoutes({
   debugMod,
+  enabledFlowNames = ['default', 'standalone'],
   formDryRun,
   formSubmitTarget,
   formProtectionMaxAgeMs,
@@ -185,254 +575,27 @@ function createFormRoutes({
     }
   });
 
-  router.post('/submit', submitLimiter, async (req, res) => {
-    applySensitivePageHeaders(res);
+  const flows = buildFormFlowConfigs();
 
-    // 每次进入提交路由都先记录一条审计日志，便于后续排查来源 IP 和路径。
-    logAuditEvent(req, 'submit_received', { dryRun: formDryRun });
-
-    const protectionResult = validateFormProtection({
-      token: req.body.form_token,
-      honeypotValue: req.body.website,
-      secret: formProtectionSecret,
-      minFillMs: formProtectionMinFillMs,
-      maxAgeMs: formProtectionMaxAgeMs
+  enabledFlowNames
+    .map((flowName) => flows[flowName])
+    .filter(Boolean)
+    .forEach((flow) => {
+    registerSubmissionFlowRoutes({
+      confirmLimiter,
+      flow,
+      formDryRun,
+      formProtectionMaxAgeMs,
+      formProtectionMinFillMs,
+      formProtectionSecret,
+      formSubmitTarget,
+      googleFormUrl,
+      router,
+      showSubmissionDiagnostics,
+      submitLimiter,
+      title
     });
-
-    if (!protectionResult.ok) {
-      logAuditEvent(req, 'submit_protection_failed', {
-        ageMs: protectionResult.ageMs,
-        reason: protectionResult.reason,
-        status: 400
-      });
-      return res.status(400).send(req.t('server.invalidFormSubmission'));
-    }
-
-    let encodedPayload = '';
-
-    try {
-      // 先把请求体校验并规范化成 Google Form 需要的值。
-      const { errors, values } = validateSubmission(req.body, req.t);
-      if (errors.length > 0) {
-        logAuditEvent(req, 'submit_validation_failed', {
-          errorCount: errors.length,
-          status: 400
-        });
-        return res.status(400).send(`${req.t('server.submitFailedPrefix')}${errors.join('；')}`);
-      }
-
-      const fields = buildGoogleFormFields(values, req.t);
-      const confirmationFields = buildConfirmationFields(values, req.t);
-      encodedPayload = encodeGoogleFormFields(fields);
-
-      // 干跑模式下直接渲染预览页，不真正请求 Google。
-      if (formDryRun) {
-        const pageTitle = req.t('pageTitles.submitPreview', { title });
-
-        logAuditEvent(req, 'submit_preview_rendered', {
-          fieldCount: fields.length,
-          status: 200
-        });
-
-        return renderFrontendPage({
-          legacyData: {
-            title: pageTitle,
-            googleFormUrl: redactGoogleFormUrl(googleFormUrl),
-            fields,
-            encodedPayload,
-            pageRobots: sensitiveRobotsPolicy
-          },
-          legacyView: 'submit_preview',
-          pageProps: {
-            backFormUrl: '/form',
-            encodedPayload,
-            fields,
-            googleFormUrl: redactGoogleFormUrl(googleFormUrl)
-          },
-          pageRobots: sensitiveRobotsPolicy,
-          pageType: 'submit-preview',
-          req,
-          res,
-          title: pageTitle
-        });
-      }
-
-      const confirmationPayload = encodeConfirmationPayload({
-        encodedPayload,
-        submissionValues: values
-      });
-      // 生产模式下强制多一步确认，给用户最后一次核对机会，也阻止客户端改包直接提交。
-      const confirmationToken = issueFormConfirmationToken({
-        payload: confirmationPayload,
-        secret: formProtectionSecret
-      });
-      logAuditEvent(req, 'submit_confirmation_rendered', {
-        fieldCount: fields.length,
-        status: 200
-      });
-      return renderFrontendPage({
-        legacyData: {
-          pageRobots: sensitiveRobotsPolicy,
-          title: req.t('pageTitles.submitConfirm', { title }),
-          confirmationPayload,
-          confirmationToken,
-          fields: confirmationFields
-        },
-        legacyView: 'submit_confirm',
-        pageProps: {
-          backFormUrl: '/form',
-          confirmationPayload,
-          confirmationToken,
-          fields: confirmationFields
-        },
-        pageRobots: sensitiveRobotsPolicy,
-        pageType: 'submit-confirm',
-        req,
-        res,
-        title: req.t('pageTitles.submitConfirm', { title })
-      });
-    } catch (error) {
-      logAuditEvent(req, 'submit_failed', {
-        error: error.message,
-        status: 500
-      });
-      // 详细错误保留在服务端日志里，对外仍返回统一失败文案。
-      console.error('Submission Error:', error.response ? error.response.data : error.message);
-      return renderSubmitFailurePage({
-        encodedPayload,
-        formSubmitTarget,
-        googleFormUrl,
-        req,
-        res,
-        showSubmissionDiagnostics,
-        submissionDiagnostics: buildSubmissionDiagnostics({
-          req,
-          resultsByTarget: Object.fromEntries(
-            getSubmitTargets(formSubmitTarget).map((target) => [target, {
-              ok: false,
-              error: error.message
-            }])
-          ),
-          successfulTargets: []
-        }),
-        title
-      });
-    }
-  });
-
-  router.post('/submit/confirm', confirmLimiter, async (req, res) => {
-    applySensitivePageHeaders(res);
-
-    logAuditEvent(req, 'submit_confirm_received', { dryRun: formDryRun });
-
-    const confirmationPayload = String(req.body.confirmation_payload || '').trim();
-    const confirmationToken = String(req.body.confirmation_token || '').trim();
-    const confirmationResult = validateFormConfirmation({
-      token: confirmationToken,
-      payload: confirmationPayload,
-      secret: formProtectionSecret,
-      maxAgeMs: formProtectionMaxAgeMs
     });
-
-    if (!confirmationResult.ok) {
-      logAuditEvent(req, 'submit_confirm_validation_failed', {
-        ageMs: confirmationResult.ageMs,
-        reason: confirmationResult.reason,
-        status: 400
-      });
-      return res.status(400).send(req.t('server.invalidFormSubmission'));
-    }
-
-    let encodedPayload = '';
-    let submissionValues = null;
-
-    try {
-      const decodedConfirmationPayload = decodeConfirmationPayload(confirmationPayload);
-      encodedPayload = decodedConfirmationPayload.encodedPayload;
-      submissionValues = decodedConfirmationPayload.submissionValues;
-
-      const submissionResult = await submitToConfiguredTargets({
-        encodedPayload,
-        formSubmitTarget,
-        googleFormUrl,
-        req,
-        submissionValues
-      });
-      const submissionDiagnostics = buildSubmissionDiagnostics({
-        req,
-        resultsByTarget: submissionResult.resultsByTarget,
-        successfulTargets: submissionResult.successfulTargets
-      });
-
-      if (submissionResult.successfulTargets.length === 0) {
-        logAuditEvent(req, 'submit_failed', {
-          failedTargets: submissionDiagnostics.failedTargets.map((target) => target.id),
-          status: 500
-        });
-        return renderSubmitFailurePage({
-          encodedPayload,
-          formSubmitTarget,
-          googleFormUrl,
-          req,
-          res,
-          showSubmissionDiagnostics,
-          submissionDiagnostics,
-          title
-        });
-      }
-
-      logAuditEvent(req, 'submit_succeeded', {
-        failedTargets: submissionDiagnostics.failedTargets.map((target) => target.id),
-        status: 200,
-        successfulTargets: submissionDiagnostics.successfulTargets.map((target) => target.id)
-      });
-      return renderFrontendPage({
-        legacyData: {
-          pageRobots: sensitiveRobotsPolicy,
-          showSubmissionDiagnostics,
-          submissionDiagnostics,
-          title
-        },
-        legacyView: 'submit',
-        pageProps: {
-          showSubmissionDiagnostics,
-          submissionDiagnostics
-        },
-        pageRobots: sensitiveRobotsPolicy,
-        pageType: 'submit-success',
-        req,
-        res,
-        title
-      });
-    } catch (error) {
-      logAuditEvent(req, 'submit_failed', {
-        error: error.message,
-        status: 500
-      });
-      console.error('Submission Error:', error.response ? error.response.data : error.message);
-      return renderSubmitFailurePage({
-        encodedPayload,
-        formSubmitTarget,
-        googleFormUrl,
-        req,
-        res,
-        showSubmissionDiagnostics,
-        submissionDiagnostics: buildSubmissionDiagnostics({
-        req,
-        resultsByTarget: {
-          ...Object.fromEntries(
-            getSubmitTargets(formSubmitTarget).map((target) => [target, {
-              ok: false,
-              error: error.message
-            }])
-          )
-        },
-          successfulTargets: []
-        }),
-        title
-      });
-    }
-  });
 
   return router;
 }

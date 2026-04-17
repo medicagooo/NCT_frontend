@@ -14,7 +14,9 @@
     "playwright:install": "npx playwright install chromium",
     "secure-config": "node scripts/secure-config.js",
     "dev:workers": "npx wrangler dev",
-    "deploy:workers": "npx wrangler deploy --keep-vars"
+    "deploy:workers": "npx wrangler deploy --keep-vars",
+    "dev:workers:standalone-form": "npx wrangler dev -c standalone/form-worker/wrangler.jsonc",
+    "deploy:workers:standalone-form": "npx wrangler deploy -c standalone/form-worker/wrangler.jsonc --keep-vars"
   },
   "keywords": [],
   "author": "",
