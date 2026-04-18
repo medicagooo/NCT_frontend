@@ -234,6 +234,7 @@ function buildFormFlowConfigs() {
         success: 'submit-success'
       },
       renderMode: 'legacy',
+      standaloneEnhancements: true,
       submitPath: '/form/standalone/submit',
       titleKey: 'form.standalone.title',
       views: {
@@ -253,6 +254,7 @@ function buildFormFlowConfigs() {
         success: 'submit-success'
       },
       renderMode: 'legacy',
+      standaloneEnhancements: true,
       submitPath: '/submit',
       titleKey: 'form.standalone.title',
       views: {
@@ -310,7 +312,9 @@ function registerSubmissionFlowRoutes({
 
     try {
       // 先把请求体校验并规范化成 Google Form 需要的值。
-      const { errors, values } = validateSubmission(req.body, req.t);
+      const { errors, values } = validateSubmission(req.body, req.t, {
+        standaloneEnhancements: Boolean(flow.standaloneEnhancements)
+      });
       if (errors.length > 0) {
         logAuditEvent(req, 'submit_validation_failed', {
           errorCount: errors.length,

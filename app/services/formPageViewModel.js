@@ -1,9 +1,14 @@
 const { getAreaOptions } = require('../../config/areaSelector');
 const {
+  getLocalizedAgentRelationshipOptions,
+  getLocalizedExitMethodOptions,
   getLocalizedFormRules,
   getLocalizedIdentityOptions,
+  getLocalizedLegalAidOptions,
   getLocalizedOtherSexTypeOptions,
-  getLocalizedSexOptions
+  getLocalizedParentMotivationOptions,
+  getLocalizedSexOptions,
+  getLocalizedViolenceCategoryOptions
 } = require('../../config/formConfig');
 const { sensitiveRobotsPolicy } = require('../../config/security');
 const { issueFormProtectionToken } = require('./formProtectionService');
@@ -17,11 +22,16 @@ function buildFormPageViewModel({ apiUrl, formProtectionSecret, req, title: page
     apiUrl,
     areaOptions: { provinces },
     formProtectionToken: issueFormProtectionToken({ secret: formProtectionSecret }),
+    agentRelationshipOptions: getLocalizedAgentRelationshipOptions(t),
+    exitMethodOptions: getLocalizedExitMethodOptions(t),
     formRules: getLocalizedFormRules(t),
     identityOptions: getLocalizedIdentityOptions(t),
+    legalAidOptions: getLocalizedLegalAidOptions(t),
     otherSexTypeOptions: getLocalizedOtherSexTypeOptions(t),
+    parentMotivationOptions: getLocalizedParentMotivationOptions(t),
     pageRobots: sensitiveRobotsPolicy,
-    sexOptions: getLocalizedSexOptions(t)
+    sexOptions: getLocalizedSexOptions(t),
+    violenceCategoryOptions: getLocalizedViolenceCategoryOptions(t)
   };
 }
 
