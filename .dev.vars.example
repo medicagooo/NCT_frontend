@@ -1,3 +1,11 @@
-# No-Torsion root no longer deploys its own Worker backend.
-# For Hono mode, deploy and configure `nct-api-sql-sub`.
-# For the legacy Express / Workers stack, use the independent project in `old/`.
+# No-Torsion root no longer deploys its own Worker backend, so the current frontend-only project does not read `.dev.vars`.
+#
+# Use `.env` for frontend and build-time variables instead:
+# - `VITE_NCT_API_SQL_PUBLIC_DATA_URL`
+# - `VITE_NCT_SUB_FORM_URL`
+#
+# Put Worker runtime variables in the sibling backend projects:
+# - `../nct-api-sql/.dev.vars`
+# - `../nct-api-sql-sub/.dev.vars`
+#
+# If you need the old Express / Workers stack, use `../NCT_old` rather than this root project.

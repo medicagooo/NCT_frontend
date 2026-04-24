@@ -26,8 +26,13 @@ import {
   loadBlogArticlePayload,
   loadBlogIndexPayload
 } from './staticContent';
+import {
+  buildNoTorsionBackendConfig,
+  hasConfiguredNoTorsionBackend
+} from './noTorsionBackend.mjs';
 
 const REACT_PORTAL_ENHANCED_FORM_VARIANT = 'react_portal_enhanced';
+const BLOG_TRANSLATION_REQUEST_BATCH_SIZE = 6;
 const EASTER_EGG_CLICK_TARGET = 6;
 const EASTER_EGG_CLICK_WINDOW_MS = 2400;
 const EASTER_EGG_TRIGGER_EVENT = 'nct:easter-egg-activate';
@@ -93,6 +98,29 @@ const MAP_FILTER_OPTIONS = [
   { value: AGENT_IDENTITY, key: ['map', 'tags', 'agent'], fallback: 'Agent' },
   { value: '批量数据', key: ['map', 'tags', 'bulk'], fallback: 'Bulk' }
 ];
+const RECORD_TRANSLATION_FIELD_CONFIGS = [
+  {
+    fieldKey: 'experience',
+    originalLabel: '受害者经历',
+    sourceKey: 'experience',
+    titlePath: ['form', 'fields', 'experience'],
+    titleFallback: 'Experience'
+  },
+  {
+    fieldKey: 'scandal',
+    originalLabel: '学校丑闻',
+    sourceKey: 'scandal',
+    titlePath: ['form', 'fields', 'scandal'],
+    titleFallback: 'Scandal'
+  },
+  {
+    fieldKey: 'other',
+    originalLabel: '其他',
+    sourceKey: 'else',
+    titlePath: ['form', 'fields', 'other'],
+    titleFallback: 'Other'
+  }
+];
 
 let sharedMapPayload = null;
 let sharedMapRequest = null;
@@ -100,6 +128,7 @@ let sharedProvinceGeoJson = null;
 let sharedProvinceGeoJsonRequest = null;
 const schoolMarkerIconCache = new Map();
 const midiSequenceCache = new Map();
+const translationMemoryCache = new Map();
 let activeMidiPlayback = null;
 
 function readPath(source, path, fallback = '') {
@@ -889,6 +918,10 @@ function appendLangToHref(href, lang) {
 }
 
 function getLinkNavigationProps(href) {
+  if (!href) {
+    return {};
+  }
+
   const url = new URL(href, window.location.origin);
 
   return url.origin === window.location.origin
@@ -900,21 +933,87 @@ function getLinkNavigationProps(href) {
 }
 
 function resolveFrontendDeploymentMode(bootstrap) {
-  return bootstrap && bootstrap.deploymentMode === 'hono'
+  return hasConfiguredNoTorsionBackend({
+    formPageUrl: bootstrap && bootstrap.formPageUrl ? bootstrap.formPageUrl : ''
+  })
     ? 'hono'
     : 'api-only';
 }
 
 function resolveFrontendFormHref(bootstrap) {
-  const lang = bootstrap && bootstrap.lang ? bootstrap.lang : 'zh-CN';
-  const deploymentMode = resolveFrontendDeploymentMode(bootstrap);
-  const formPageUrl = String(bootstrap && bootstrap.formPageUrl || '').trim();
+  return getNoTorsionBackendConfig(bootstrap).formHref;
+}
 
-  if (deploymentMode === 'hono' && formPageUrl) {
-    return appendLangToHref(formPageUrl, lang);
+function getNoTorsionBackendConfig(bootstrap) {
+  return buildNoTorsionBackendConfig({
+    currentOrigin: window.location.origin,
+    formPageUrl: bootstrap && bootstrap.formPageUrl ? bootstrap.formPageUrl : '',
+    lang: bootstrap && bootstrap.lang ? bootstrap.lang : 'zh-CN'
+  });
+}
+
+function getTranslationCacheKey(targetLanguage, text) {
+  return `${targetLanguage}::${text}`;
+}
+
+function readTranslationCache(targetLanguage, text) {
+  const cacheKey = getTranslationCacheKey(targetLanguage, text);
+
+  if (translationMemoryCache.has(cacheKey)) {
+    return translationMemoryCache.get(cacheKey);
   }
 
-  return appendLangToUrl('/form', lang);
+  try {
+    const cachedValue = window.sessionStorage.getItem(cacheKey);
+
+    if (cachedValue) {
+      translationMemoryCache.set(cacheKey, cachedValue);
+      return cachedValue;
+    }
+  } catch (_error) {
+    // Ignore storage failures and fall back to uncached requests.
+  }
+
+  return '';
+}
+
+function writeTranslationCache(targetLanguage, text, translatedText) {
+  if (!translatedText) {
+    return;
+  }
+
+  const cacheKey = getTranslationCacheKey(targetLanguage, text);
+  translationMemoryCache.set(cacheKey, translatedText);
+
+  try {
+    window.sessionStorage.setItem(cacheKey, translatedText);
+  } catch (_error) {
+    // Ignore storage failures and keep the translated content in memory for this page load.
+  }
+}
+
+async function requestNoTorsionTranslations({ items, targetLanguage, translateApiUrl }) {
+  if (!translateApiUrl) {
+    return [];
+  }
+
+  const response = await window.fetch(translateApiUrl, {
+    body: JSON.stringify({
+      items,
+      targetLanguage
+    }),
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    method: 'POST'
+  });
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error(payload && payload.error ? payload.error : 'Translation unavailable');
+  }
+
+  return Array.isArray(payload.translations) ? payload.translations : [];
 }
 
 function updatePathWithLang(currentPath, lang) {
@@ -933,10 +1032,6 @@ function getSearchParamValue(searchParams, key) {
 }
 
 function resolveInitialPortalSection(pathname) {
-  if (pathname === '/form') {
-    return 'form';
-  }
-
   if (pathname === '/blog') {
     return 'blog';
   }
@@ -951,6 +1046,7 @@ function resolveCorrectionFormAction(pathname) {
 }
 
 function resolveFrontendRoute(currentPath) {
+  // The static shell only resolves routes backed by generated content or explicit frontend-only flows.
   const url = new URL(currentPath || window.location.href, window.location.origin);
   const pathname = url.pathname || '/';
   const query = {
@@ -960,11 +1056,19 @@ function resolveFrontendRoute(currentPath) {
     tag: getSearchParamValue(url.searchParams, 'tag')
   };
 
-  if (pathname === '/' || pathname === '/map' || pathname === '/form' || pathname === '/blog') {
+  if (pathname === '/' || pathname === '/map' || pathname === '/blog') {
     return {
       pathname,
       query,
       routeType: pathname === '/' ? 'home' : 'portal'
+    };
+  }
+
+  if (pathname === '/form') {
+    return {
+      pathname,
+      query,
+      routeType: 'form-redirect'
     };
   }
 
@@ -1610,6 +1714,7 @@ function useFrontendRuntime(scope) {
 
   useEffect(() => {
     let disposed = false;
+    // This still expects a same-origin compatibility backend; static-only deployments will surface an unavailable state here.
     const requestUrl = new URL('/api/frontend-runtime', window.location.origin);
 
     requestUrl.searchParams.set('scope', scope);
@@ -1774,13 +1879,32 @@ function LanguageSwitcher({ currentPath, lang, options }) {
 
 function SiteHeader({ bootstrap, easterEggActive }) {
   const { currentPath, i18n, lang, languageOptions } = bootstrap;
-
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
   const links = [
-    { href: '/map', label: readPath(i18n, ['index', 'viewMap'], 'Map') },
-    { href: '/form', label: readPath(i18n, ['index', 'fillForm'], 'Form') },
-    { href: '/blog', label: readPath(i18n, ['index', 'blogLibrary'], 'Blog') },
-    { href: '/privacy', label: readPath(i18n, ['navigation', 'privacy'], 'Privacy') }
-  ];
+    {
+      active: currentPath.startsWith('/map'),
+      href: appendLangToUrl('/map', lang),
+      label: readPath(i18n, ['index', 'viewMap'], 'Map')
+    },
+    backendConfig.formEnabled
+      ? {
+          active: false,
+          href: backendConfig.formHref,
+          label: readPath(i18n, ['index', 'fillForm'], 'Form'),
+          navigationProps: getLinkNavigationProps(backendConfig.formHref)
+        }
+      : null,
+    {
+      active: currentPath.startsWith('/blog'),
+      href: appendLangToUrl('/blog', lang),
+      label: readPath(i18n, ['index', 'blogLibrary'], 'Blog')
+    },
+    {
+      active: currentPath.startsWith('/privacy'),
+      href: appendLangToUrl('/privacy', lang),
+      label: readPath(i18n, ['navigation', 'privacy'], 'Privacy')
+    }
+  ].filter(Boolean);
 
   return (
     <header className="site-header">
@@ -1801,8 +1925,9 @@ function SiteHeader({ bootstrap, easterEggActive }) {
           {links.map((link) => (
             <a
               key={link.href}
-              className={currentPath.startsWith(link.href) && link.href !== '/' ? 'is-active' : ''}
-              href={appendLangToUrl(link.href, lang)}
+              className={link.active ? 'is-active' : ''}
+              href={link.href}
+              {...(link.navigationProps || {})}
             >
               {link.label}
             </a>
@@ -1929,10 +2054,10 @@ function getFormAccessModeCopy(lang, formEnabled) {
 
 function FormAccessSection({ bootstrap }) {
   const { i18n, lang } = bootstrap;
-  const deploymentMode = resolveFrontendDeploymentMode(bootstrap);
-  const formEnabled = deploymentMode === 'hono' && String(bootstrap.formPageUrl || '').trim();
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
+  const formEnabled = backendConfig.formEnabled;
   const accessCopy = getFormAccessModeCopy(lang, Boolean(formEnabled));
-  const formHref = resolveFrontendFormHref(bootstrap);
+  const formHref = backendConfig.formHref;
   const formLinkProps = getLinkNavigationProps(formHref);
 
   return (
@@ -1976,8 +2101,33 @@ function FormAccessSection({ bootstrap }) {
 function HomePage({ bootstrap }) {
   const { i18n, lang } = bootstrap;
   const clickTimestampsRef = useRef([]);
-  const formHref = resolveFrontendFormHref(bootstrap);
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
+  const formHref = backendConfig.formHref;
+  const formEnabled = backendConfig.formEnabled;
   const formLinkProps = getLinkNavigationProps(formHref);
+  const showcaseCards = [
+    {
+      description: readPath(i18n, ['map', 'note'], 'A public view of institutions and records.'),
+      href: appendLangToUrl('/map', lang),
+      label: readPath(i18n, ['map', 'sections', 'map'], 'Open map'),
+      title: readPath(i18n, ['map', 'title'], 'Map')
+    },
+    formEnabled
+      ? {
+          description: readPath(i18n, ['form', 'subtitle'], 'Documenting harm helps make resistance visible.'),
+          href: formHref,
+          label: readPath(i18n, ['index', 'fillForm'], 'Open form'),
+          navigationProps: formLinkProps,
+          title: readPath(i18n, ['form', 'title'], 'Form')
+        }
+      : null,
+    {
+      description: readPath(i18n, ['blog', 'subtitle'], 'A library of memory, evidence, and guidance.'),
+      href: appendLangToUrl('/blog', lang),
+      label: readPath(i18n, ['index', 'blogLibrary'], 'Open blog'),
+      title: readPath(i18n, ['blog', 'title'], 'Blog')
+    }
+  ].filter(Boolean);
 
   function handleTitleClick() {
     const currentTimestamp = Date.now();
@@ -2004,9 +2154,11 @@ function HomePage({ bootstrap }) {
         titleClassName="hero-block__title--home"
       >
         <div className="hero-actions">
-          <a className="glass-button glass-button--primary" href={formHref} {...formLinkProps}>
-            {readPath(i18n, ['index', 'fillForm'], 'Form')}
-          </a>
+          {formEnabled ? (
+            <a className="glass-button glass-button--primary" href={formHref} {...formLinkProps}>
+              {readPath(i18n, ['index', 'fillForm'], 'Form')}
+            </a>
+          ) : null}
           <a className="glass-button" href={appendLangToUrl('/map', lang)}>
             {readPath(i18n, ['index', 'viewMap'], 'Map')}
           </a>
@@ -2017,24 +2169,14 @@ function HomePage({ bootstrap }) {
       </HeroBlock>
 
       <section className="showcase-grid">
-        <article className="glass-card">
-          <span className="glass-card__badge">01</span>
-          <h2>{readPath(i18n, ['map', 'title'], 'Map')}</h2>
-          <p>{readPath(i18n, ['map', 'note'], 'A public view of institutions and records.')}</p>
-          <a href={appendLangToUrl('/map', lang)}>{readPath(i18n, ['map', 'sections', 'map'], 'Open map')}</a>
-        </article>
-        <article className="glass-card">
-          <span className="glass-card__badge">02</span>
-          <h2>{readPath(i18n, ['form', 'title'], 'Form')}</h2>
-          <p>{readPath(i18n, ['form', 'subtitle'], 'Documenting harm helps make resistance visible.')}</p>
-          <a href={formHref} {...formLinkProps}>{readPath(i18n, ['index', 'fillForm'], 'Open form')}</a>
-        </article>
-        <article className="glass-card">
-          <span className="glass-card__badge">03</span>
-          <h2>{readPath(i18n, ['blog', 'title'], 'Blog')}</h2>
-          <p>{readPath(i18n, ['blog', 'subtitle'], 'A library of memory, evidence, and guidance.')}</p>
-          <a href={appendLangToUrl('/blog', lang)}>{readPath(i18n, ['index', 'blogLibrary'], 'Open blog')}</a>
-        </article>
+        {showcaseCards.map((card, index) => (
+          <article className="glass-card" key={card.href}>
+            <span className="glass-card__badge">{String(index + 1).padStart(2, '0')}</span>
+            <h2>{card.title}</h2>
+            <p>{card.description}</p>
+            <a href={card.href} {...(card.navigationProps || {})}>{card.label}</a>
+          </article>
+        ))}
       </section>
     </PageChrome>
   );
@@ -2043,12 +2185,10 @@ function HomePage({ bootstrap }) {
 function PortalTabs({ activeSection, i18n, lang, onNavigate }) {
   const compactLabels = {
     blog: lang === 'zh-TW' ? '文庫' : lang === 'zh-CN' ? '文库' : 'Blog',
-    form: lang === 'zh-TW' ? '表單' : lang === 'zh-CN' ? '表单' : 'Form',
     map: lang === 'zh-TW' ? '地圖' : lang === 'zh-CN' ? '地图' : 'Map'
   };
   const tabs = [
     { id: 'map', href: '/map', label: compactLabels.map },
-    { id: 'form', href: '/form', label: compactLabels.form },
     { id: 'blog', href: '/blog', label: compactLabels.blog }
   ];
 
@@ -2377,7 +2517,66 @@ function LeafletOverviewMap({
   return <div className="map-surface" ref={mapElementRef} />;
 }
 
-function MapRecordCard({ group, i18n, lang, query, selected, onSelect }) {
+function MapRecordEntryDetails({
+  i18n,
+  lang,
+  query,
+  record,
+  translateApiUrl,
+  translationEnabled
+}) {
+  const [translationRequested, setTranslationRequested] = useState(false);
+  const { sections, translationState } = useRecordTranslations({
+    i18n,
+    lang,
+    record,
+    shouldLoad: translationRequested,
+    translateApiUrl,
+    translationEnabled
+  });
+
+  return (
+    <details
+      className="map-record-entry"
+      onToggle={(event) => {
+        if (event.currentTarget.open) {
+          setTranslationRequested(true);
+        }
+      }}
+    >
+      <summary>
+        <span>{getInputTypeLabel(i18n, record.inputType)}</span>
+        <strong>{getRecordDateSummary(i18n, record)}</strong>
+      </summary>
+      <div className="map-record-entry__body">
+        <TranslatedRecordSections
+          headingTag="h4"
+          i18n={i18n}
+          originalClassName="map-record-entry__section"
+          sections={sections}
+          textClassName="map-record-entry__translation-text"
+          translationClassName="map-record-entry__section map-record-entry__section--translation"
+          translationEnabled={translationEnabled}
+          translationState={translationState}
+        />
+        <a className="inline-link" href={buildRecordHref(record, { lang, query })}>
+          {readPath(i18n, ['map', 'list', 'viewDetails'], 'Open detail')}
+        </a>
+      </div>
+    </details>
+  );
+}
+
+function MapRecordCard({
+  group,
+  i18n,
+  lang,
+  query,
+  selected,
+  onSelect,
+  translateApiUrl,
+  translationEnabled
+}) {
   const summaryRecord = group.summaryRecord || {};
   const counts = {
     self: group.pages.filter((page) => page.inputType === SELF_IDENTITY).length,
@@ -2406,42 +2605,22 @@ function MapRecordCard({ group, i18n, lang, query, selected, onSelect }) {
 
       <div className="map-record-card__entries">
         {group.pages.map((record, index) => (
-          <details key={`${group.schoolKey}-${index}`} className="map-record-entry">
-            <summary>
-              <span>{getInputTypeLabel(i18n, record.inputType)}</span>
-              <strong>{getRecordDateSummary(i18n, record)}</strong>
-            </summary>
-            <div className="map-record-entry__body">
-              {record.experience ? (
-                <div>
-                  <h4>{readPath(i18n, ['form', 'fields', 'experience'], 'Experience')}</h4>
-                  <p>{record.experience}</p>
-                </div>
-              ) : null}
-              {record.scandal ? (
-                <div>
-                  <h4>{readPath(i18n, ['form', 'fields', 'scandal'], 'Scandal')}</h4>
-                  <p>{record.scandal}</p>
-                </div>
-              ) : null}
-              {record.else ? (
-                <div>
-                  <h4>{readPath(i18n, ['form', 'fields', 'other'], 'Other')}</h4>
-                  <p>{record.else}</p>
-                </div>
-              ) : null}
-              <a className="inline-link" href={buildRecordHref(record, { lang, query })}>
-                Open detail
-              </a>
-            </div>
-          </details>
+          <MapRecordEntryDetails
+            i18n={i18n}
+            key={`${group.schoolKey}-${index}`}
+            lang={lang}
+            query={query}
+            record={record}
+            translateApiUrl={translateApiUrl}
+            translationEnabled={translationEnabled}
+          />
         ))}
       </div>
     </article>
   );
 }
 
-function MapSection({ apiUrl, i18n, initialQuery, lang }) {
+function MapSection({ apiUrl, i18n, initialQuery, lang, translateApiUrl, translationEnabled }) {
   const { error, loading, payload } = useMapPayload(apiUrl);
   const [selectedSchoolKey, setSelectedSchoolKey] = useState('');
   const [inputType, setInputType] = useState(initialQuery.inputType || '');
@@ -2619,6 +2798,8 @@ function MapSection({ apiUrl, i18n, initialQuery, lang }) {
                 search
               }}
               selected={group.schoolKey === selectedSchoolKey}
+              translateApiUrl={translateApiUrl}
+              translationEnabled={translationEnabled}
             />
           ))}
         </div>
@@ -3650,16 +3831,15 @@ function BlogSection({
 function PortalPage({ bootstrap }) {
   const { apiUrl, currentPath, i18n, lang } = bootstrap;
   const route = resolveFrontendRoute(currentPath);
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
   const blog = useBlogIndex(i18n, lang);
   const [activeSection, setActiveSection] = useState(resolveInitialPortalSection(route.pathname));
   const [activeTag, setActiveTag] = useState(route.query.tag || '');
   const mapSectionRef = useRef(null);
-  const formSectionRef = useRef(null);
   const blogSectionRef = useRef(null);
 
   const sectionRefs = {
     blog: blogSectionRef,
-    form: formSectionRef,
     map: mapSectionRef
   };
 
@@ -3761,17 +3941,32 @@ function PortalPage({ bootstrap }) {
       <HeroBlock
         description={readPath(i18n, ['index', 'tagline'], '')}
         eyebrow="Stacked Portal"
-        title="Map / Form / Blog"
-      />
+        title={backendConfig.formEnabled ? 'Map / Blog / Form' : 'Map / Blog'}
+      >
+        {backendConfig.formEnabled ? (
+          <div className="hero-actions">
+            <a
+              className="glass-button glass-button--primary"
+              href={backendConfig.formHref}
+              {...getLinkNavigationProps(backendConfig.formHref)}
+            >
+              {readPath(i18n, ['index', 'fillForm'], 'Form')}
+            </a>
+          </div>
+        ) : null}
+      </HeroBlock>
 
       <PortalTabs activeSection={activeSection} i18n={i18n} lang={lang} onNavigate={navigateToSection} />
 
       <section className="portal-section" data-section-id="map" ref={mapSectionRef}>
-        <MapSection apiUrl={apiUrl} i18n={i18n} initialQuery={route.query} lang={lang} />
-      </section>
-
-      <section className="portal-section" data-section-id="form" ref={formSectionRef}>
-        <FormAccessSection bootstrap={bootstrap} />
+        <MapSection
+          apiUrl={apiUrl}
+          i18n={i18n}
+          initialQuery={route.query}
+          lang={lang}
+          translateApiUrl={backendConfig.translateApiUrl}
+          translationEnabled={backendConfig.recordTranslationEnabled}
+        />
       </section>
 
       <section className="portal-section" data-section-id="blog" ref={blogSectionRef}>
@@ -4483,10 +4678,380 @@ function CorrectionErrorPage({ bootstrap }) {
   );
 }
 
+function FormRedirectPage({ bootstrap }) {
+  const { i18n, lang } = bootstrap;
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
+  const accessCopy = getFormAccessModeCopy(lang, backendConfig.formEnabled);
+
+  useEffect(() => {
+    if (!backendConfig.formEnabled || !backendConfig.formHref) {
+      return;
+    }
+
+    window.location.replace(backendConfig.formHref);
+  }, [backendConfig.formEnabled, backendConfig.formHref]);
+
+  return (
+    <PageChrome bootstrap={bootstrap}>
+      <HeroBlock
+        description={accessCopy.body}
+        eyebrow={readPath(i18n, ['form', 'title'], 'Form')}
+        title={readPath(i18n, ['index', 'fillForm'], 'Form')}
+      >
+        <div className="panel-actions">
+          {backendConfig.formEnabled ? (
+            <a
+              className="glass-button glass-button--primary"
+              href={backendConfig.formHref}
+              {...getLinkNavigationProps(backendConfig.formHref)}
+            >
+              {accessCopy.ctaLabel || readPath(i18n, ['index', 'fillForm'], 'Form')}
+            </a>
+          ) : null}
+          <a className="glass-button" href={appendLangToUrl('/map', lang)}>
+            {readPath(i18n, ['index', 'viewMap'], 'Map')}
+          </a>
+          <a className="glass-button" href={appendLangToUrl('/blog', lang)}>
+            {readPath(i18n, ['index', 'blogLibrary'], 'Blog')}
+          </a>
+        </div>
+      </HeroBlock>
+    </PageChrome>
+  );
+}
+
+function buildRecordTranslationSections(i18n, record) {
+  return RECORD_TRANSLATION_FIELD_CONFIGS
+    .map((config) => ({
+      ...config,
+      sourceText: String(record && record[config.sourceKey] || '').trim(),
+      translatedLabel: readPath(i18n, config.titlePath, config.titleFallback)
+    }))
+    .filter((section) => section.sourceText);
+}
+
+function useRecordTranslations({
+  i18n,
+  lang,
+  record,
+  shouldLoad = true,
+  translateApiUrl,
+  translationEnabled
+}) {
+  const sections = buildRecordTranslationSections(i18n, record);
+  const [translationState, setTranslationState] = useState({
+    status: 'idle',
+    textsByField: {}
+  });
+  const requestKey = sections.map((section) => `${section.fieldKey}:${section.sourceText}`).join('\n');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!translationEnabled || !translateApiUrl || sections.length === 0) {
+      setTranslationState({
+        status: 'idle',
+        textsByField: {}
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    if (!shouldLoad) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    const cachedTextsByField = Object.create(null);
+    const pendingItems = [];
+
+    sections.forEach((section) => {
+      const cachedTranslation = readTranslationCache(lang, section.sourceText);
+
+      if (cachedTranslation) {
+        cachedTextsByField[section.fieldKey] = cachedTranslation;
+      } else {
+        pendingItems.push(section);
+      }
+    });
+
+    if (pendingItems.length === 0) {
+      setTranslationState({
+        status: 'loaded',
+        textsByField: cachedTextsByField
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    setTranslationState({
+      status: 'loading',
+      textsByField: cachedTextsByField
+    });
+
+    void requestNoTorsionTranslations({
+      items: pendingItems.map((section) => ({
+        fieldKey: section.fieldKey,
+        text: section.sourceText
+      })),
+      targetLanguage: lang,
+      translateApiUrl
+    })
+      .then((translations) => {
+        if (cancelled) {
+          return;
+        }
+
+        const nextTextsByField = {
+          ...cachedTextsByField
+        };
+
+        translations.forEach((entry) => {
+          const translatedText = entry && typeof entry.translatedText === 'string'
+            ? entry.translatedText.trim()
+            : '';
+          const matchedSection = pendingItems.find((section) => section.fieldKey === entry.fieldKey);
+
+          if (!translatedText || !matchedSection) {
+            return;
+          }
+
+          nextTextsByField[entry.fieldKey] = translatedText;
+          writeTranslationCache(lang, matchedSection.sourceText, translatedText);
+        });
+
+        setTranslationState({
+          status: 'loaded',
+          textsByField: nextTextsByField
+        });
+      })
+      .catch(() => {
+        if (cancelled) {
+          return;
+        }
+
+        setTranslationState({
+          status: 'error',
+          textsByField: cachedTextsByField
+        });
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [lang, requestKey, shouldLoad, translateApiUrl, translationEnabled]);
+
+  return {
+    sections,
+    translationState
+  };
+}
+
+function TranslatedRecordSections({
+  headingTag = 'h2',
+  i18n,
+  originalClassName = 'prose-panel',
+  sections,
+  textClassName = 'translation-text',
+  translationClassName = 'prose-panel prose-panel--translation',
+  translationEnabled,
+  translationState
+}) {
+  const HeadingTag = headingTag;
+
+  if (sections.length === 0) {
+    return null;
+  }
+
+  return sections.map((section) => {
+    const translatedText = translationState.textsByField[section.fieldKey] || '';
+    const translationStatusClass = translatedText
+      ? 'is-ready'
+      : (
+        translationState.status === 'error' || translationState.status === 'loaded'
+          ? 'is-unavailable'
+          : 'is-loading'
+      );
+    const translationMessage = translatedText
+      || (
+        translationState.status === 'error' || translationState.status === 'loaded'
+          ? readPath(i18n, ['map', 'list', 'translationUnavailable'], 'Translation unavailable')
+          : readPath(i18n, ['map', 'list', 'translationLoading'], 'Translating...')
+      );
+
+    return (
+      <div className="record-translation-stack" key={section.fieldKey}>
+        <div className={originalClassName}>
+          <HeadingTag>{translationEnabled ? section.originalLabel : section.translatedLabel}</HeadingTag>
+          <p>{section.sourceText}</p>
+        </div>
+        {translationEnabled ? (
+          <div className={`${translationClassName} ${translationStatusClass}`.trim()}>
+            <HeadingTag>{section.translatedLabel}</HeadingTag>
+            <p className={`${textClassName} ${translationStatusClass}`.trim()}>
+              {translationMessage}
+            </p>
+          </div>
+        ) : null}
+      </div>
+    );
+  });
+}
+
+function RecordTranslationSections({ i18n, lang, record, translateApiUrl, translationEnabled }) {
+  const { sections, translationState } = useRecordTranslations({
+    i18n,
+    lang,
+    record,
+    translateApiUrl,
+    translationEnabled
+  });
+
+  return (
+    <TranslatedRecordSections
+      i18n={i18n}
+      sections={sections}
+      translationEnabled={translationEnabled}
+      translationState={translationState}
+    />
+  );
+}
+
 function ArticlePage({ bootstrap }) {
   const { currentPath, i18n, lang } = bootstrap;
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
   const route = resolveFrontendRoute(currentPath);
   const article = useBlogArticle(route.articleId);
+  const articleShellRef = useRef(null);
+
+  useEffect(() => {
+    if (
+      !backendConfig.articleTranslationEnabled
+      || !backendConfig.translateApiUrl
+      || !article.payload
+      || !articleShellRef.current
+    ) {
+      return;
+    }
+
+    const translationNodes = Array.from(
+      articleShellRef.current.querySelectorAll('[data-blog-translation-source]')
+    );
+    let cancelled = false;
+
+    if (translationNodes.length === 0) {
+      return;
+    }
+
+    function revealTranslation(node, translatedText) {
+      if (!node || !translatedText || cancelled) {
+        return;
+      }
+
+      node.textContent = translatedText;
+      node.hidden = false;
+      node.classList.add('is-visible');
+      node.dataset.translationState = 'loaded';
+    }
+
+    function chunkEntries(entries, size) {
+      const chunks = [];
+
+      for (let index = 0; index < entries.length; index += size) {
+        chunks.push(entries.slice(index, index + size));
+      }
+
+      return chunks;
+    }
+
+    async function hydrateTranslationNodes(nodes) {
+      const pendingEntries = [];
+
+      nodes.forEach((node, index) => {
+        const sourceText = String(node.dataset.blogTranslationSource || '').trim();
+
+        if (!sourceText) {
+          return;
+        }
+
+        const cachedTranslation = readTranslationCache(lang, sourceText);
+
+        if (cachedTranslation) {
+          revealTranslation(node, cachedTranslation);
+          return;
+        }
+
+        node.dataset.translationState = 'loading';
+        pendingEntries.push({
+          fieldKey: String(index),
+          node,
+          sourceText
+        });
+      });
+
+      for (const entryChunk of chunkEntries(pendingEntries, BLOG_TRANSLATION_REQUEST_BATCH_SIZE)) {
+        if (cancelled) {
+          return;
+        }
+
+        try {
+          const translations = await requestNoTorsionTranslations({
+            items: entryChunk.map((entry) => ({
+              fieldKey: entry.fieldKey,
+              text: entry.sourceText
+            })),
+            targetLanguage: lang,
+            translateApiUrl: backendConfig.translateApiUrl
+          });
+          const translatedTextByFieldKey = Object.create(null);
+
+          translations.forEach((entry) => {
+            if (!entry || typeof entry.fieldKey !== 'string') {
+              return;
+            }
+
+            translatedTextByFieldKey[entry.fieldKey] = typeof entry.translatedText === 'string'
+              ? entry.translatedText.trim()
+              : '';
+          });
+
+          entryChunk.forEach(({ fieldKey, node, sourceText }) => {
+            const translatedText = translatedTextByFieldKey[fieldKey] || '';
+
+            if (!translatedText) {
+              node.dataset.translationState = 'empty';
+              return;
+            }
+
+            writeTranslationCache(lang, sourceText, translatedText);
+            revealTranslation(node, translatedText);
+          });
+        } catch (_error) {
+          entryChunk.forEach(({ node }) => {
+            node.dataset.translationState = 'error';
+          });
+        }
+
+        await new Promise((resolve) => {
+          window.setTimeout(resolve, 0);
+        });
+      }
+    }
+
+    void hydrateTranslationNodes(translationNodes);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    article.payload,
+    backendConfig.articleTranslationEnabled,
+    backendConfig.translateApiUrl,
+    lang
+  ]);
 
   if (article.loading) {
     return (
@@ -4533,7 +5098,10 @@ function ArticlePage({ bootstrap }) {
       </HeroBlock>
 
       <section className="glass-panel blog-article-shell">
-        <div dangerouslySetInnerHTML={{ __html: article.payload.articleHtml || '' }} />
+        <div
+          dangerouslySetInnerHTML={{ __html: article.payload.articleHtml || '' }}
+          ref={articleShellRef}
+        />
       </section>
     </PageChrome>
   );
@@ -4541,6 +5109,7 @@ function ArticlePage({ bootstrap }) {
 
 function RecordPage({ bootstrap }) {
   const { apiUrl, currentPath, i18n, lang, pageProps } = bootstrap;
+  const backendConfig = getNoTorsionBackendConfig(bootstrap);
   const route = resolveFrontendRoute(currentPath);
   const { error, loading, payload } = useMapPayload(apiUrl);
   const recordSlug = pageProps.recordSlug || route.recordSlug || '';
@@ -4614,26 +5183,13 @@ function RecordPage({ bootstrap }) {
           ))}
         </div>
 
-        {location.record.experience ? (
-          <div className="prose-panel">
-            <h2>{readPath(i18n, ['form', 'fields', 'experience'], 'Experience')}</h2>
-            <p>{location.record.experience}</p>
-          </div>
-        ) : null}
-
-        {location.record.scandal ? (
-          <div className="prose-panel">
-            <h2>{readPath(i18n, ['form', 'fields', 'scandal'], 'Scandal')}</h2>
-            <p>{location.record.scandal}</p>
-          </div>
-        ) : null}
-
-        {location.record.else ? (
-          <div className="prose-panel">
-            <h2>{readPath(i18n, ['form', 'fields', 'other'], 'Other')}</h2>
-            <p>{location.record.else}</p>
-          </div>
-        ) : null}
+        <RecordTranslationSections
+          i18n={i18n}
+          lang={lang}
+          record={location.record}
+          translateApiUrl={backendConfig.translateApiUrl}
+          translationEnabled={backendConfig.recordTranslationEnabled}
+        />
 
         <div className="panel-actions">
           <a className="glass-button" href={appendLangToUrl(`/map${window.location.search || ''}`, lang)}>
@@ -4675,6 +5231,10 @@ function resolveFrontendDocumentTitle(route, i18n, siteName) {
     case 'article':
       return formatMessage(pageTitles.article || '{articleTitle}|{title}', {
         articleTitle: route.articleId || readPath(i18n, ['blog', 'title'], 'Article'),
+        title: resolvedSiteName
+      });
+    case 'form-redirect':
+      return formatMessage(pageTitles.form || '{title}', {
         title: resolvedSiteName
       });
     case 'correction':
@@ -4770,6 +5330,7 @@ export function App({ bootstrap }) {
   if (normalizedBootstrap.pageType === 'frontend-router') {
     const pageByRoute = {
       article: <ArticlePage bootstrap={normalizedBootstrap} />,
+      'form-redirect': <FormRedirectPage bootstrap={normalizedBootstrap} />,
       home: <HomePage bootstrap={normalizedBootstrap} />,
       'not-found': <NotFoundPage bootstrap={normalizedBootstrap} />,
       portal: <PortalPage bootstrap={normalizedBootstrap} />,

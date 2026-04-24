@@ -68,50 +68,12 @@ function buildBlogArticlePayload(articleId) {
   };
 }
 
-function resolveMapDataSnapshotSourceUrl() {
-  const sourceUrl = String(
-    process.env.PUBLIC_MAP_DATA_SNAPSHOT_SOURCE_URL
-    || process.env.PUBLIC_MAP_DATA_URL
-    || ''
-  ).trim().replace(/\/+$/, '');
-
-  if (!sourceUrl || sourceUrl === STATIC_MAP_DATA_PATH) {
-    return '';
-  }
-
-  return sourceUrl;
-}
-
 async function writeMapDataSnapshot(contentDirectory) {
+  // Keep builds deterministic by reusing the checked-in static snapshot.
   const targetFilePath = path.join(contentDirectory, 'map-data.json');
-  const sourceUrl = resolveMapDataSnapshotSourceUrl();
 
-  if (!sourceUrl) {
-    if (!fs.existsSync(targetFilePath)) {
-      throw new Error(`Missing ${targetFilePath} and no PUBLIC_MAP_DATA_SNAPSHOT_SOURCE_URL was provided.`);
-    }
-    return;
-  }
-
-  try {
-    const response = await fetch(sourceUrl, {
-      headers: {
-        Accept: 'application/json'
-      }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Map snapshot request failed with ${response.status}`);
-    }
-
-    writeJson(targetFilePath, await response.json());
-  } catch (error) {
-    if (fs.existsSync(targetFilePath)) {
-      console.warn(`Map snapshot refresh skipped: ${error.message}`);
-      return;
-    }
-
-    throw error;
+  if (!fs.existsSync(targetFilePath)) {
+    throw new Error(`Missing ${targetFilePath}. Add a static map snapshot before building.`);
   }
 }
 
@@ -141,7 +103,21 @@ async function main() {
     });
 }
 
-main().catch((error) => {
-  console.error(error);
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
+}
+
+module.exports = {
+  STATIC_MAP_DATA_PATH,
+  buildAreaSelectorPayload,
+  buildBlogArticlePayload,
+  buildBlogIndexPayload,
+  buildSiteBootstrapPayload,
+  ensureDirectory,
+  main,
+  writeJson,
+  writeMapDataSnapshot
+};

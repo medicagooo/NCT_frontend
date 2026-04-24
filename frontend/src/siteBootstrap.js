@@ -22,6 +22,7 @@ async function fetchJson(url) {
 }
 
 async function loadSiteBootstrapPayload() {
+  // Cache the generated bootstrap snapshot in memory so route changes do not refetch the same static file.
   if (siteBootstrapPayload) {
     return siteBootstrapPayload;
   }
@@ -40,15 +41,6 @@ async function loadSiteBootstrapPayload() {
     });
 
   return siteBootstrapRequest;
-}
-
-function resolveDeploymentMode() {
-  const rawMode = getTrimmedEnvValue(
-    import.meta.env.VITE_NO_TORSION_DEPLOY_MODE,
-    'api-only'
-  ).toLowerCase();
-
-  return rawMode === 'hono' ? 'hono' : 'api-only';
 }
 
 function resolveSupportedLanguages(payload) {
@@ -99,6 +91,7 @@ function resolveHonoFormUrl() {
 }
 
 export async function buildStaticBootstrap() {
+  // Merge build-time env switches with the generated bootstrap snapshot into one client boot payload.
   const payload = await loadSiteBootstrapPayload();
   const lang = resolveLanguage(payload);
   const messagesByLanguage = payload && typeof payload.messagesByLanguage === 'object'
@@ -108,12 +101,13 @@ export async function buildStaticBootstrap() {
     ? payload.languageOptionsByLanguage
     : {};
   const i18n = messagesByLanguage[lang] || messagesByLanguage['zh-CN'] || {};
+  const formPageUrl = resolveHonoFormUrl();
 
   return {
     apiUrl: resolvePublicDataUrl(),
     currentPath: `${window.location.pathname}${window.location.search}${window.location.hash}`,
-    deploymentMode: resolveDeploymentMode(),
-    formPageUrl: resolveHonoFormUrl(),
+    deploymentMode: formPageUrl ? 'hono' : 'api-only',
+    formPageUrl,
     i18n,
     lang,
     languageOptions: Array.isArray(languageOptionsByLanguage[lang])
