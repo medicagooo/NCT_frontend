@@ -17,7 +17,7 @@
   </p>
 </div>
 
-> 更新说明（2026-04-25）：当前 `NCT_frontend` 项目根目录已经是独立的 `Vite + React` 静态前端项目。旧版 `Express + EJS + Workers` 已迁到同级 `../NCT_old`；表单、翻译、数据写入等后端能力请配合同级 `../nct-api-sql` 与 `../nct-api-sql-sub` 使用。
+> 更新说明（2026-04-25）：当前 `NCT_frontend` 项目根目录已经是独立的 `Vite + React` 静态前端项目。旧版 `Express + EJS + Workers` 已迁到同级 `../NCT_old`；公开 JSON、表单、翻译、数据写入等后端能力请配合同级 `../NCT_database` 与 `../NCT_backend` 使用。
 
 ## 项目定位
 
@@ -26,7 +26,7 @@
 - 渲染 `/`、`/map`、`/blog`、`/port/:id`、`/privacy`、`/form` 等静态前端路由
 - 在构建阶段生成 `site-bootstrap.json`、`area-selector.json` 和博客文章快照
 - 复用仓库内的 `public/content/map-data.json` 静态快照，并在运行时按需读取公开地图数据
-- 在配置 `VITE_NCT_SUB_FORM_URL` 时，把 `/form` 入口跳转到 `nct-api-sql-sub` 的独立表单页
+- 在配置 `VITE_NCT_SUB_FORM_URL` 时，把 `/form` 入口跳转到 `NCT_backend` 的独立表单页
 - 在配置 `VITE_NCT_SUB_FORM_URL` 时，复用同一后端的 `/api/no-torsion/translate-text` 处理英文博客正文，以及非 `zh-CN` 语言下记录详情的运行时翻译
 
 当前根目录 **不再** 提供下列能力：
@@ -40,8 +40,8 @@
 如果你仍然需要上述能力，请使用：
 
 - [`../NCT_old`](../NCT_old)：旧版 `Express + EJS + Workers`
-- [`../nct-api-sql`](../nct-api-sql)：主库、公开 JSON、管理台、主推/回拉同步
-- [`../nct-api-sql-sub`](../nct-api-sql-sub)：独立表单页、`NCT_frontend` 后端 API、翻译与上报
+- [`../NCT_database`](../NCT_database)：母库、公开 JSON、管理台、推送与灾备回拉
+- [`../NCT_backend`](../NCT_backend)：独立表单页、`NCT_frontend` 后端 API、翻译与上报
 
 ## 当前功能
 
@@ -51,7 +51,7 @@
 | 地图浏览 | 读取 `VITE_NCT_API_SQL_PUBLIC_DATA_URL` 指向的公开 JSON；默认回退到仓库内 `public/content/map-data.json` |
 | 博客内容 | 构建时把 Markdown 转成包含预渲染 HTML 的静态 JSON，前端按需加载 |
 | 多语言 | 通过 `site-bootstrap.json` 下发词条、语言选项和默认语言 |
-| 表单入口 | `/form` 始终是前端入口页；配置 `VITE_NCT_SUB_FORM_URL` 后会自动跳转到 `nct-api-sql-sub` 的独立表单页，否则显示 `api-only` 说明 |
+| 表单入口 | `/form` 始终是前端入口页；配置 `VITE_NCT_SUB_FORM_URL` 后会自动跳转到 `NCT_backend` 的独立表单页，否则显示 `api-only` 说明 |
 | 运行时翻译 | 需配置 `VITE_NCT_SUB_FORM_URL`；英文博客启用文章翻译，非 `zh-CN` 记录详情启用字段翻译 |
 
 ## 兼容说明
@@ -110,7 +110,7 @@ cp .env.example .env
 
 按功能视为必填：
 
-- `VITE_NCT_API_SQL_PUBLIC_DATA_URL`：当你希望前端直接读取 `nct-api-sql` 的实时公开数据，而不是仓库内快照时
+- `VITE_NCT_API_SQL_PUBLIC_DATA_URL`：当你希望前端直接读取 `NCT_database` 的实时公开数据，而不是仓库内快照时
 - `VITE_NCT_SUB_FORM_URL`：当你希望启用 `/form` 跳转和运行时翻译时
 
 关键变量如下：
@@ -118,7 +118,7 @@ cp .env.example .env
 | 变量 | 说明 |
 | --- | --- |
 | `VITE_NCT_API_SQL_PUBLIC_DATA_URL` | 公开地图 JSON 地址；默认 `/content/map-data.json` |
-| `VITE_NCT_SUB_FORM_URL` | `nct-api-sql-sub` 的独立表单页地址，例如 `https://sub.example.com/form` |
+| `VITE_NCT_SUB_FORM_URL` | `NCT_backend` 的独立表单页地址，例如 `https://sub.example.com/form` |
 
 补充说明：
 
@@ -143,8 +143,8 @@ npm run dev
 
 如果希望接入完整链路，通常还需要同时启动：
 
-- `../nct-api-sql`：提供公开地图 JSON
-- `../nct-api-sql-sub`：提供独立表单页和翻译 API
+- `../NCT_database`：提供公开地图 JSON
+- `../NCT_backend`：提供独立表单页和翻译 API
 
 ## 常用命令
 

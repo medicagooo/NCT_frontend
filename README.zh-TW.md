@@ -17,7 +17,7 @@
   </p>
 </div>
 
-> 更新說明（2026-04-25）：目前 `NCT_frontend` 專案根目錄已經是獨立的 `Vite + React` 靜態前端專案。舊版 `Express + EJS + Workers` 已遷到同級 `../NCT_old`；表單、翻譯、資料寫入等後端能力請搭配同級 `../nct-api-sql` 與 `../nct-api-sql-sub` 使用。
+> 更新說明（2026-04-25）：目前 `NCT_frontend` 專案根目錄已經是獨立的 `Vite + React` 靜態前端專案。舊版 `Express + EJS + Workers` 已遷到同級 `../NCT_old`；公開 JSON、表單、翻譯、資料寫入等後端能力請搭配同級 `../NCT_database` 與 `../NCT_backend` 使用。
 
 ## 專案定位
 
@@ -26,7 +26,7 @@
 - 渲染 `/`、`/map`、`/blog`、`/port/:id`、`/privacy`、`/form` 等靜態前端路由
 - 在建置階段產生 `site-bootstrap.json`、`area-selector.json` 與部落格文章快照
 - 重用倉庫內的 `public/content/map-data.json` 靜態快照，並在執行期按需讀取公開地圖資料
-- 在設定 `VITE_NCT_SUB_FORM_URL` 時，把 `/form` 入口導向 `nct-api-sql-sub` 的獨立表單頁
+- 在設定 `VITE_NCT_SUB_FORM_URL` 時，把 `/form` 入口導向 `NCT_backend` 的獨立表單頁
 - 在設定 `VITE_NCT_SUB_FORM_URL` 時，重用同一個後端的 `/api/no-torsion/translate-text` 處理英文部落格正文，以及非 `zh-CN` 語言下記錄詳情的執行期翻譯
 
 目前根目錄 **不再** 提供下列能力：
@@ -40,8 +40,8 @@
 如果你仍需要上述能力，請使用：
 
 - [`../NCT_old`](../NCT_old)：舊版 `Express + EJS + Workers`
-- [`../nct-api-sql`](../nct-api-sql)：母庫、公開 JSON、管理台、主推/回拉同步
-- [`../nct-api-sql-sub`](../nct-api-sql-sub)：獨立表單頁、`NCT_frontend` 後端 API、翻譯與上報
+- [`../NCT_database`](../NCT_database)：母庫、公開 JSON、管理台、推送與災備回拉
+- [`../NCT_backend`](../NCT_backend)：獨立表單頁、`NCT_frontend` 後端 API、翻譯與上報
 
 ## 目前功能
 
@@ -51,7 +51,7 @@
 | 地圖瀏覽 | 讀取 `VITE_NCT_API_SQL_PUBLIC_DATA_URL` 指向的公開 JSON；預設回退到 `public/content/map-data.json` |
 | 部落格內容 | 建置時把 Markdown 轉成包含預先渲染 HTML 的靜態 JSON |
 | 多語言 | 透過 `site-bootstrap.json` 下發詞條、語言選項與預設語言 |
-| 表單入口 | `/form` 一直都是前端入口頁；設定 `VITE_NCT_SUB_FORM_URL` 後會自動導向 `nct-api-sql-sub` 的獨立表單頁，否則顯示 `api-only` 說明 |
+| 表單入口 | `/form` 一直都是前端入口頁；設定 `VITE_NCT_SUB_FORM_URL` 後會自動導向 `NCT_backend` 的獨立表單頁，否則顯示 `api-only` 說明 |
 | 執行期翻譯 | 需設定 `VITE_NCT_SUB_FORM_URL`；英文部落格啟用文章翻譯，非 `zh-CN` 記錄詳情啟用欄位翻譯 |
 
 ## 相容性說明
@@ -110,7 +110,7 @@ cp .env.example .env
 
 按功能視為必填：
 
-- `VITE_NCT_API_SQL_PUBLIC_DATA_URL`：當你希望前端直接讀取 `nct-api-sql` 的即時公開資料，而不是倉庫內快照時
+- `VITE_NCT_API_SQL_PUBLIC_DATA_URL`：當你希望前端直接讀取 `NCT_database` 的即時公開資料，而不是倉庫內快照時
 - `VITE_NCT_SUB_FORM_URL`：當你希望啟用 `/form` 跳轉與執行期翻譯時
 
 關鍵變數如下：
@@ -118,7 +118,7 @@ cp .env.example .env
 | 變數 | 說明 |
 | --- | --- |
 | `VITE_NCT_API_SQL_PUBLIC_DATA_URL` | 公開地圖 JSON 位址；預設 `/content/map-data.json` |
-| `VITE_NCT_SUB_FORM_URL` | `nct-api-sql-sub` 的獨立表單頁位址，例如 `https://sub.example.com/form` |
+| `VITE_NCT_SUB_FORM_URL` | `NCT_backend` 的獨立表單頁位址，例如 `https://sub.example.com/form` |
 
 補充說明：
 
@@ -143,8 +143,8 @@ npm run dev
 
 如果想跑完整鏈路，通常還會同時啟動：
 
-- `../nct-api-sql`：提供公開地圖資料
-- `../nct-api-sql-sub`：提供獨立表單頁與翻譯 API
+- `../NCT_database`：提供公開地圖資料
+- `../NCT_backend`：提供獨立表單頁與翻譯 API
 
 ## 常用命令
 
