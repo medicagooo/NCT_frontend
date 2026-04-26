@@ -17,7 +17,7 @@
   </p>
 </div>
 
-> Updated on April 25, 2026: the `NCT_frontend` project root is now a standalone `Vite + React` static frontend. The legacy `Express + EJS + Workers` stack lives in the sibling project `../NCT_old`, while backend services now belong to `../nct-api-sql` and `../nct-api-sql-sub`.
+> Updated on April 25, 2026: the `NCT_frontend` project root is now a standalone `Vite + React` static frontend. The legacy `Express + EJS + Workers` stack lives in the sibling project `../NCT_old`, while public JSON, form, translation, and data-write backend services now belong to `../NCT_database` and `../NCT_backend`.
 
 ## What This Project Is
 
@@ -26,7 +26,7 @@
 - rendering static frontend routes such as `/`, `/map`, `/blog`, `/port/:id`, `/privacy`, and `/form`
 - generating `site-bootstrap.json`, `area-selector.json`, and blog article snapshots at build time
 - reusing the checked-in `public/content/map-data.json` snapshot while reading public map data at runtime
-- redirecting `/form` to the standalone `nct-api-sql-sub` form page when `VITE_NCT_SUB_FORM_URL` is configured
+- redirecting `/form` to the standalone `NCT_backend` form page when `VITE_NCT_SUB_FORM_URL` is configured
 - reusing the same backend origin for runtime translation of English blog articles and record details in non-`zh-CN` languages
 
 The root project no longer ships:
@@ -40,8 +40,8 @@ The root project no longer ships:
 Related sibling projects:
 
 - [`../NCT_old`](../NCT_old): legacy `Express + EJS + Workers`
-- [`../nct-api-sql`](../nct-api-sql): main database, public JSON, admin console, push/pull sync
-- [`../nct-api-sql-sub`](../nct-api-sql-sub): standalone form page, `NCT_frontend` backend APIs, translation, service reporting
+- [`../NCT_database`](../NCT_database): mother database, public JSON, admin console, push, and recovery pull
+- [`../NCT_backend`](../NCT_backend): standalone form page, `NCT_frontend` backend APIs, translation, and service reporting
 
 ## Current Capabilities
 
@@ -51,7 +51,7 @@ Related sibling projects:
 | Map browsing | Reads the public dataset from `VITE_NCT_API_SQL_PUBLIC_DATA_URL`, falling back to `public/content/map-data.json` |
 | Blog content | Converts Markdown into static JSON payloads with pre-rendered HTML during the build |
 | Multilingual UI | Uses `site-bootstrap.json` for messages, supported languages, and defaults |
-| Form entry | `/form` is always a frontend gateway page; when `VITE_NCT_SUB_FORM_URL` is set it redirects to `nct-api-sql-sub`, otherwise it shows `api-only` guidance |
+| Form entry | `/form` is always a frontend gateway page; when `VITE_NCT_SUB_FORM_URL` is set it redirects to `NCT_backend`, otherwise it shows `api-only` guidance |
 | Runtime translation | Requires `VITE_NCT_SUB_FORM_URL`; English blog articles get article translation, and non-`zh-CN` record details get field translation |
 
 ## Compatibility Notes
@@ -112,7 +112,7 @@ deployment can start with zero config.
 
 Treat these as required when you enable the related features:
 
-- `VITE_NCT_API_SQL_PUBLIC_DATA_URL` when you want live public data from `nct-api-sql` instead of the checked-in snapshot
+- `VITE_NCT_API_SQL_PUBLIC_DATA_URL` when you want live public data from `NCT_database` instead of the checked-in snapshot
 - `VITE_NCT_SUB_FORM_URL` when you want the `/form` entry route and runtime translation features
 
 Key variables:
@@ -120,7 +120,7 @@ Key variables:
 | Variable | Purpose |
 | --- | --- |
 | `VITE_NCT_API_SQL_PUBLIC_DATA_URL` | public map dataset URL; defaults to `/content/map-data.json` |
-| `VITE_NCT_SUB_FORM_URL` | standalone form URL from `nct-api-sql-sub`, for example `https://sub.example.com/form` |
+| `VITE_NCT_SUB_FORM_URL` | standalone form URL from `NCT_backend`, for example `https://sub.example.com/form` |
 
 Additional notes:
 
@@ -145,8 +145,8 @@ Default local address:
 
 For a full end-to-end local setup, you usually also want:
 
-- `../nct-api-sql` for the public dataset
-- `../nct-api-sql-sub` for the standalone form page and runtime translation API
+- `../NCT_database` for the public dataset
+- `../NCT_backend` for the standalone form page and runtime translation API
 
 ## Common Commands
 
@@ -181,26 +181,27 @@ This is what lets the frontend render:
 
 without shipping its own backend.
 
-## Deployment
+## Cloudflare Workers Deployment
 
-This project is intended for static hosting such as Cloudflare Pages, Netlify, Vercel static output, or an Nginx static directory.
+Use Cloudflare Dashboard Workers Builds. The project name is the Workers-compatible form of the directory name: `nct-frontend`.
 
-Build command:
+The deployment reads [`wrangler.toml`](./wrangler.toml). This project does not need D1, R2, Cron, or Worker secrets; `[assets].directory = "./dist"` publishes the Vite build output, and `not_found_handling = "single-page-application"` keeps frontend routes such as `/map`, `/blog`, and `/form` working.
 
-```bash
-npm run frontend:build
-```
+| Cloudflare field | Value |
+| --- | --- |
+| Project name | `nct-frontend` |
+| Production branch | your production branch, for example `main` |
+| Path / Root directory | `NCT_frontend` in this monorepo; `/` if this project is a standalone repository |
+| Build command | `npm run test:unit` |
+| Deploy command | `npm run deploy:workers` |
+| Non-production branch deploy command | `npm run deploy:workers:preview` |
 
-Publish directory:
+Set these build-time variables in `Settings` -> `Variables and Secrets`:
 
-```text
-dist/
-```
+- `VITE_NCT_API_SQL_PUBLIC_DATA_URL=https://api.example.com/`
+- `VITE_NCT_SUB_FORM_URL=https://sub.example.com/form`
 
-The repo already includes:
-
-- [`public/_redirects`](./public/_redirects) for SPA route fallback to `index.html`
-- [`404.html`](./404.html) as a static-hosting fallback page
+After deployment, bind the custom domain in `Settings` -> `Domains & Routes`.
 
 ## README Audit Result
 
